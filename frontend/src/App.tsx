@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
+import NewMeetingPage from '@/pages/NewMeetingPage';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -77,6 +78,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/meetings/new"
+          element={
+            <ProtectedRoute>
+              <NewMeetingPage />
             </ProtectedRoute>
           }
         />

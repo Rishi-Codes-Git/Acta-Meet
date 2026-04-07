@@ -1,27 +1,47 @@
-import OpenAI from 'openai';
 import { config } from '../config';
 import { AIExtractionResult, PriorityLevel } from '../types';
 
-const openai = new OpenAI({
-  apiKey: config.openai.apiKey,
-});
+// Ollama API endpoint
+const OLLAMA_URL = config.ollama?.url || 'http://localhost:11434';
+const OLLAMA_MODEL = config.ollama?.model || 'llama3.2';
+
+// Ollama response type
+interface OllamaResponse {
+  response: string;
+  done: boolean;
+}
+
+// Helper to call Ollama
+async function callOllama(prompt: string, systemPrompt?: string): Promise<string> {
+  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: OLLAMA_MODEL,
+      prompt: systemPrompt ? `${systemPrompt}\n\nUser: ${prompt}` : prompt,
+      stream: false,
+      options: {
+        temperature: 0.3,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as OllamaResponse;
+  return data.response || '';
+}
 
 // Summarize discussion points
 export async function summarizeDiscussion(
   meetingType: string,
   discussionText: string
 ): Promise<string> {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: `You are a professional meeting summarizer for Acta, a meeting management tool. 
-Create concise, actionable summaries in a professional tone.`,
-      },
-      {
-        role: 'user',
-        content: `Summarize this ${meetingType.replace('_', ' ')} meeting discussion:
+  const systemPrompt = `You are a professional meeting summarizer for Acta, a meeting management tool. Create concise, actionable summaries in a professional tone.`;
+  
+  const prompt = `Summarize this ${meetingType.replace('_', ' ')} meeting discussion:
 
 ${discussionText}
 
@@ -29,35 +49,27 @@ Provide:
 1. A 2-3 sentence executive summary
 2. Key points discussed (as bullet points)
 
-Keep it concise and professional.`,
-      },
-    ],
-    temperature: 0.3,
-    max_tokens: 500,
-  });
+Keep it concise and professional.`;
 
-  return response.choices[0]?.message?.content || 'Unable to generate summary.';
+  try {
+    return await callOllama(prompt, systemPrompt);
+  } catch (error) {
+    console.error('Ollama summarize error:', error);
+    return 'Unable to generate summary. Please ensure Ollama is running.';
+  }
 }
 
 // Extract action items, decisions from discussion
 export async function extractMeetingInsights(
   discussionText: string
 ): Promise<AIExtractionResult> {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
-      {
-        role: 'system',
-        content: `You are an AI assistant for Acta that extracts structured data from meeting discussions.
-Always respond with valid JSON only.`,
-      },
-      {
-        role: 'user',
-        content: `Extract action items and decisions from this meeting discussion:
+  const prompt = `You are an AI assistant that extracts structured data from meeting discussions.
+
+Extract action items and decisions from this meeting discussion:
 
 ${discussionText}
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this exact format (no other text):
 {
   "summary": "2-3 sentence summary of the discussion",
   "decisions": [
@@ -68,26 +80,32 @@ Return ONLY valid JSON in this exact format:
       "task": "Clear task description",
       "assignee": "Person name or null",
       "deadline": "YYYY-MM-DD or null",
-      "priority": "high" | "medium" | "low"
+      "priority": "high"
     }
   ]
 }
 
 Rules:
-- Priority: urgent/critical/ASAP = high, normal = medium, nice-to-have = low
-- Deadline: infer from "by Friday", "next week", "end of month" etc.
+- Priority must be: "high", "medium", or "low"
+- urgent/critical/ASAP = high, normal = medium, nice-to-have = low
+- Deadline: infer from "by Friday", "next week", "end of month" etc. Use YYYY-MM-DD format
 - If no clear assignee, use null
-- Extract ALL action items mentioned`,
-      },
-    ],
-    temperature: 0.2,
-    max_tokens: 1000,
-    response_format: { type: 'json_object' },
-  });
+- Extract ALL action items mentioned
+- ONLY output the JSON, nothing else`;
 
   try {
-    const content = response.choices[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
+    const response = await callOllama(prompt);
+    
+    // Try to extract JSON from response
+    let jsonStr = response;
+    
+    // Find JSON in response (handle markdown code blocks)
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+    
+    const parsed = JSON.parse(jsonStr);
     
     return {
       summary: parsed.summary || '',
@@ -102,20 +120,25 @@ Rules:
       })),
     };
   } catch (error) {
-    console.error('Failed to parse AI response:', error);
+    console.error('Failed to parse Ollama response:', error);
     return { summary: '', decisions: [], action_items: [] };
   }
 }
 
-// Transcribe audio using Whisper
+// Transcribe audio - for now returns placeholder (whisper.cpp integration later)
 export async function transcribeAudio(audioFilePath: string): Promise<string> {
-  const fs = await import('fs');
-  
-  const response = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(audioFilePath),
-    model: 'whisper-1',
-    response_format: 'text',
-  });
+  // TODO: Integrate with whisper.cpp for local transcription
+  // For now, we'll return a message indicating manual transcription is needed
+  console.log('Audio transcription requested for:', audioFilePath);
+  return `[Audio transcription is not yet available locally. Please paste the meeting notes manually or integrate whisper.cpp for local transcription.]`;
+}
 
-  return response;
+// Check if Ollama is running
+export async function checkOllamaStatus(): Promise<boolean> {
+  try {
+    const response = await fetch(`${OLLAMA_URL}/api/tags`);
+    return response.ok;
+  } catch {
+    return false;
+  }
 }

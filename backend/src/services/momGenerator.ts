@@ -4,6 +4,27 @@ import { generatePDF, generateDocx } from './documentGenerator';
 import { createNotification } from './notificationService';
 import { MomContent, Meeting, Participant, AgendaItem, DiscussionPoint, Decision, ActionItem } from '../types';
 
+// Parse deadline from AI response
+function parseDeadline(deadlineStr: string | undefined): string | null {
+  if (!deadlineStr) return null;
+  
+  // Clean up the string - remove "or null", "or undefined", extra quotes, etc.
+  const cleaned = deadlineStr
+    .toLowerCase()
+    .replace(/\s*(or|,)\s*(null|undefined|none|n\/a)/gi, '')
+    .trim()
+    .replace(/^["']|["']$/g, ''); // Remove quotes
+  
+  if (!cleaned || cleaned === 'null' || cleaned === 'undefined') return null;
+  
+  // Try to parse as date
+  const date = new Date(cleaned);
+  if (isNaN(date.getTime())) return null;
+  
+  // Return in YYYY-MM-DD format
+  return date.toISOString().split('T')[0];
+}
+
 // Match assignee name to participant/user
 async function matchAssigneeToUser(
   assigneeName: string, 
@@ -103,10 +124,13 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       // Match assignee to user account
       const assigneeMatch = await matchAssigneeToUser(item.assignee || '', meetingId);
       
+      // Parse deadline properly
+      const deadline = parseDeadline(item.deadline);
+      
       const result = await query(
         `INSERT INTO action_items (meeting_id, title, assignee_name, assignee_id, assigned_by, priority, deadline) 
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [meetingId, item.task, assigneeMatch.name, assigneeMatch.user_id, generatedBy, item.priority, item.deadline]
+        [meetingId, item.task, assigneeMatch.name, assigneeMatch.user_id, generatedBy, item.priority, deadline]
       );
       
       const actionItem = result.rows[0];

@@ -1,3 +1,4 @@
+// @ts-ignore
 import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, AlignmentType } from 'docx';
 import fs from 'fs';
@@ -100,7 +101,7 @@ export async function generatePDF(mom: MomContent, meetingId: string): Promise<s
       mom.action_items.forEach(item => {
         const taskText = item.title.substring(0, 40) + (item.title.length > 40 ? '...' : '');
         doc.text(taskText, col1, y, { width: 190 });
-        doc.text(item.assignee || '-', col2, y);
+        doc.text(item.assignee_name || '-', col2, y);
         doc.text(item.deadline ? new Date(item.deadline).toLocaleDateString() : '-', col3, y);
         doc.text(item.priority.toUpperCase(), col4, y);
         doc.text(item.status, col5, y);
@@ -219,7 +220,7 @@ export async function generateDocx(mom: MomContent, meetingId: string): Promise<
               ...mom.action_items.map(item => new TableRow({
                 children: [
                   new TableCell({ children: [new Paragraph({ text: item.title })] }),
-                  new TableCell({ children: [new Paragraph({ text: item.assignee || '-' })] }),
+                  new TableCell({ children: [new Paragraph({ text: item.assignee_name || '-' })] }),
                   new TableCell({ children: [new Paragraph({ text: item.deadline ? new Date(item.deadline).toLocaleDateString() : '-' })] }),
                   new TableCell({ children: [new Paragraph({ text: item.priority.toUpperCase() })] }),
                   new TableCell({ children: [new Paragraph({ text: item.status })] }),
