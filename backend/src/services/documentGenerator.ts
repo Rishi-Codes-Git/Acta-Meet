@@ -68,6 +68,23 @@ function formatPriority(priority: string | undefined): string {
   return priority.charAt(0).toUpperCase() + priority.slice(1);
 }
 
+function stripMarkdownFormatting(text: string | undefined): string {
+  if (!text) return '';
+  
+  return text
+    // Remove bold: **text** or __text__ -> text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    // Remove italic: *text* or _text_ -> text
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    // Remove markdown headings: ### text -> text
+    .replace(/^#+\s+(.+)$/gm, '$1')
+    // Remove bullet points but keep text: - text or * text -> text
+    .replace(/^[\*\-]\s+/gm, '')
+    .trim();
+}
+
 // Generate PDF
 export async function generatePDF(mom: MomContent, meetingId: string): Promise<string> {
   const uploadsDir = config.upload.dir;
@@ -162,9 +179,10 @@ export async function generatePDF(mom: MomContent, meetingId: string): Promise<s
     sectionTitle('Executive Summary');
     ensureSpace(70);
     const summaryTop = doc.y;
-    const summaryHeight = Math.max(58, doc.heightOfString(mom.summary || 'No summary available.', { width: contentWidth - 24 }) + 20);
+    const cleanedSummary = stripMarkdownFormatting(mom.summary) || 'No summary available.';
+    const summaryHeight = Math.max(58, doc.heightOfString(cleanedSummary, { width: contentWidth - 24 }) + 20);
     doc.rect(left, summaryTop, contentWidth, summaryHeight).fill(COLORS.brandLight);
-    doc.fillColor(COLORS.text).font('Helvetica').fontSize(10).text(mom.summary || 'No summary available.', left + 12, summaryTop + 10, {
+    doc.fillColor(COLORS.text).font('Helvetica').fontSize(10).text(cleanedSummary, left + 12, summaryTop + 10, {
       width: contentWidth - 24,
       align: 'left',
     });
@@ -174,7 +192,8 @@ export async function generatePDF(mom: MomContent, meetingId: string): Promise<s
       sectionTitle('Key Decisions');
       mom.decisions.forEach((decision) => {
         ensureSpace(16);
-        const line = `${decision.content}${decision.decided_by ? ` (${decision.decided_by})` : ''}`;
+        const cleanedDecision = stripMarkdownFormatting(decision.content);
+        const line = `${cleanedDecision}${decision.decided_by ? ` (${decision.decided_by})` : ''}`;
         doc.font('Helvetica').fontSize(10).fillColor(COLORS.text).text(`• ${line}`, { width: contentWidth });
       });
     }
@@ -447,7 +466,7 @@ export async function generateDocx(mom: MomContent, meetingId: string): Promise<
             : []),
           headingTwo('Executive Summary'),
           new Paragraph({
-            children: [new TextRun({ text: mom.summary || 'No summary available.', size: 22 })],
+            children: [new TextRun({ text: stripMarkdownFormatting(mom.summary) || 'No summary available.', size: 22 })],
             spacing: { after: 100 },
           }),
           ...(mom.decisions.length > 0
@@ -456,7 +475,7 @@ export async function generateDocx(mom: MomContent, meetingId: string): Promise<
                 ...mom.decisions.map(
                   (decision) =>
                     new Paragraph({
-                      text: `${decision.content}${decision.decided_by ? ` (${decision.decided_by})` : ''}`,
+                      text: `${stripMarkdownFormatting(decision.content)}${decision.decided_by ? ` (${decision.decided_by})` : ''}`,
                       bullet: { level: 0 },
                       spacing: { after: 40 },
                     })
