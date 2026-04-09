@@ -6,6 +6,8 @@ import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
 import DashboardPage from '@/pages/DashboardPage';
 import NewMeetingPage from '@/pages/NewMeetingPage';
+import MeetingDetailPage from '@/pages/MeetingDetailPage';
+import MeetingsPage from '@/pages/MeetingsPage';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -86,6 +88,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <NewMeetingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/meetings/:id"
+          element={
+            <ProtectedRoute>
+              <MeetingDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/meetings"
+          element={
+            <ProtectedRoute>
+              <MeetingsPage />
             </ProtectedRoute>
           }
         />

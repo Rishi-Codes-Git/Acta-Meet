@@ -99,6 +99,14 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Meeting not found' });
     }
     
+    // Try to get MoM if it exists (don't fail if it doesn't)
+    let mom = null;
+    try {
+      mom = await getMoM(id);
+    } catch (err) {
+      // MoM doesn't exist yet, that's okay
+    }
+    
     res.json({
       ...meetingResult.rows[0],
       participants: participantsResult.rows,
@@ -106,6 +114,7 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
       discussion_points: discussionResult.rows,
       decisions: decisionsResult.rows,
       action_items: actionItemsResult.rows,
+      mom: mom || null,
     });
   } catch (error) {
     console.error('Get meeting error:', error);

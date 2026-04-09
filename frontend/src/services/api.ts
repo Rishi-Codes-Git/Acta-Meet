@@ -57,9 +57,9 @@ export const meetingsApi = {
   
   generateMom: (id: string) => api.post(`/meetings/${id}/generate`),
   
-  downloadPdf: (id: string) => api.get(`/meetings/${id}/pdf`, { responseType: 'blob' }),
+  downloadPdf: (id: string) => api.get(`/meetings/${id}/download/pdf`, { responseType: 'blob' }),
   
-  downloadDocx: (id: string) => api.get(`/meetings/${id}/docx`, { responseType: 'blob' }),
+  downloadDocx: (id: string) => api.get(`/meetings/${id}/download/docx`, { responseType: 'blob' }),
 };
 
 // Action Items API
