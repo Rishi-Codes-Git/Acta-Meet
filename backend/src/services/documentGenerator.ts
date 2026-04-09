@@ -188,6 +188,14 @@ export async function generatePDF(mom: MomContent, meetingId: string): Promise<s
     });
     doc.y = summaryTop + summaryHeight + 8;
 
+    if (mom.key_points.length > 0) {
+      sectionTitle('Key Points');
+      mom.key_points.forEach((point) => {
+        ensureSpace(16);
+        doc.font('Helvetica').fontSize(10).fillColor(COLORS.text).text(`• ${point}`, { width: contentWidth });
+      });
+    }
+
     if (mom.decisions.length > 0) {
       sectionTitle('Key Decisions');
       mom.decisions.forEach((decision) => {
@@ -469,6 +477,19 @@ export async function generateDocx(mom: MomContent, meetingId: string): Promise<
             children: [new TextRun({ text: stripMarkdownFormatting(mom.summary) || 'No summary available.', size: 22 })],
             spacing: { after: 100 },
           }),
+          ...(mom.key_points.length > 0
+            ? [
+                headingTwo('Key Points'),
+                ...mom.key_points.map(
+                  (point) =>
+                    new Paragraph({
+                      text: point,
+                      bullet: { level: 0 },
+                      spacing: { after: 40 },
+                    })
+                ),
+              ]
+            : []),
           ...(mom.decisions.length > 0
             ? [
                 headingTwo('Key Decisions'),

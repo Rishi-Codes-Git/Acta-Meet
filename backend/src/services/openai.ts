@@ -123,28 +123,56 @@ async function callOllama(prompt: string, systemPrompt?: string): Promise<string
   return data.response || '';
 }
 
-// Summarize discussion points
+// Summarize discussion points - returns structured summary with key points
 export async function summarizeDiscussion(
   meetingType: string,
   discussionText: string
-): Promise<string> {
+): Promise<{ summary: string; key_points: string[] }> {
   const systemPrompt = `You are a professional meeting summarizer for Acta, a meeting management tool. Create concise, actionable summaries in a professional tone.`;
   
   const prompt = `Summarize this ${meetingType.replace('_', ' ')} meeting discussion:
 
 ${discussionText}
 
-Provide:
-1. A 2-3 sentence executive summary
-2. Key points discussed (as bullet points)
+Return ONLY valid JSON in this exact format (no other text, no closing statements):
+{
+  "summary": "2-3 sentence executive summary of the discussion",
+  "key_points": [
+    "First key point",
+    "Second key point",
+    "Third key point"
+  ]
+}
 
-Keep it concise and professional.`;
+Rules:
+- Summary should be 2-3 sentences, professional tone
+- Key points should be 3-5 bullet points highlighting main discussion items
+- NO closing statements like "Let me know if you need assistance"
+- NO markdown formatting
+- ONLY output the JSON, nothing else`;
 
   try {
-    return await callOllama(prompt, systemPrompt);
+    const response = await callOllama(prompt, systemPrompt);
+    
+    // Try to extract JSON from response
+    let jsonStr = response;
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+    
+    const parsed = JSON.parse(jsonStr);
+    
+    return {
+      summary: parsed.summary || '',
+      key_points: Array.isArray(parsed.key_points) ? parsed.key_points : []
+    };
   } catch (error) {
     console.warn(`Ollama summary unavailable: ${getErrorMessage(error)}`);
-    return 'Unable to generate summary. Please ensure Ollama is running.';
+    return {
+      summary: 'Unable to generate summary. Please ensure Ollama is running.',
+      key_points: []
+    };
   }
 }
 

@@ -155,6 +155,7 @@ export interface MomContent {
   agenda_items: AgendaItem[];
   discussion_points: DiscussionPoint[];
   summary: string;
+  key_points: string[];
   decisions: Decision[];
   action_items: ActionItem[];
   generated_at: Date;

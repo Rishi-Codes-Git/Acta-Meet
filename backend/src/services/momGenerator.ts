@@ -5,6 +5,24 @@ import { createNotification } from './notificationService';
 import { triggerTaskCreatedAutomation } from './n8nAutomation';
 import { MomContent, Meeting, Participant, AgendaItem, DiscussionPoint, Decision, ActionItem } from '../types';
 
+// Strip markdown formatting for professional display
+function stripMarkdownFormatting(text: string | undefined): string {
+  if (!text) return '';
+  
+  return text
+    // Remove bold: **text** or __text__ -> text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    // Remove italic: *text* or _text_ -> text
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    // Remove markdown headings: ### text -> text
+    .replace(/^#+\s+(.+)$/gm, '$1')
+    // Remove bullet points but keep text: - text or * text -> text
+    .replace(/^[\*\-]\s+/gm, '')
+    .trim();
+}
+
 // Parse deadline from AI response
 function parseDeadline(deadlineStr: string | undefined): string | null {
   if (!deadlineStr) return null;
@@ -96,6 +114,7 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
   
   // Generate AI insights
   let summary = '';
+  let key_points: string[] = [];
   let decisions: Decision[] = [];
   let action_items: ActionItem[] = [];
   
@@ -106,16 +125,21 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       extractMeetingInsights(discussionText),
     ]);
     
-    summary = summaryResult;
+    // Strip markdown formatting from summary for professional display
+    summary = stripMarkdownFormatting(summaryResult.summary);
+    key_points = summaryResult.key_points.map(point => stripMarkdownFormatting(point));
     
     // Save decisions
     for (const d of extractionResult.decisions) {
       // Try to match decided_by to a user
       const decidedByMatch = await matchAssigneeToUser(d.decided_by || '', meetingId);
       
+      // Strip markdown from decision content
+      const cleanDecision = stripMarkdownFormatting(d.decision);
+      
       const result = await query(
         'INSERT INTO decisions (meeting_id, content, decided_by, decided_by_id) VALUES ($1, $2, $3, $4) RETURNING *',
-        [meetingId, d.decision, decidedByMatch.name, decidedByMatch.user_id]
+        [meetingId, cleanDecision, decidedByMatch.name, decidedByMatch.user_id]
       );
       decisions.push(result.rows[0]);
     }
@@ -125,13 +149,16 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       // Match assignee to user account
       const assigneeMatch = await matchAssigneeToUser(item.assignee || '', meetingId);
       
+      // Strip markdown from task title
+      const cleanTaskTitle = stripMarkdownFormatting(item.task);
+      
       // Parse deadline properly
       const deadline = parseDeadline(item.deadline);
       
       const result = await query(
         `INSERT INTO action_items (meeting_id, title, assignee_name, assignee_id, assigned_by, priority, deadline) 
          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [meetingId, item.task, assigneeMatch.name, assigneeMatch.user_id, generatedBy, item.priority, deadline]
+        [meetingId, cleanTaskTitle, assigneeMatch.name, assigneeMatch.user_id, generatedBy, item.priority, deadline]
       );
       
       const actionItem = result.rows[0];
@@ -164,6 +191,7 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
     agenda_items,
     discussion_points,
     summary,
+    key_points,
     decisions,
     action_items,
     generated_at: new Date(),

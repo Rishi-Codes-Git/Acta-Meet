@@ -480,10 +480,25 @@ export default function MeetingDetailPage() {
                 {/* Summary */}
                 {mom.summary && (
                   <div className="mb-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Summary</h3>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Executive Summary</h3>
                     <p className="text-slate-800 bg-white/60 p-4 rounded-lg whitespace-pre-wrap">
                       {mom.summary}
                     </p>
+                  </div>
+                )}
+
+                {/* Key Points */}
+                {mom.key_points && mom.key_points.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Key Points</h3>
+                    <ul className="space-y-2 bg-white/60 p-4 rounded-lg">
+                      {mom.key_points.map((point, index) => (
+                        <li key={index} className="flex gap-3 text-slate-800">
+                          <span className="flex-shrink-0 text-[#42A090] font-bold">•</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 
