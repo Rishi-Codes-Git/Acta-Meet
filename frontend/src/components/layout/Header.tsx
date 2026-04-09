@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Bell, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 

@@ -8,6 +8,7 @@ import DashboardPage from '@/pages/DashboardPage';
 import NewMeetingPage from '@/pages/NewMeetingPage';
 import MeetingDetailPage from '@/pages/MeetingDetailPage';
 import MeetingsPage from '@/pages/MeetingsPage';
+import ActionItemsPage from '@/pages/ActionItemsPage';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -104,6 +105,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <MeetingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/action-items"
+          element={
+            <ProtectedRoute>
+              <ActionItemsPage />
             </ProtectedRoute>
           }
         />

@@ -71,10 +71,16 @@ export const actionItemsApi = {
   getAll: (params?: { status?: string; priority?: string }) =>
     api.get('/action-items', { params }),
   
+  getById: (id: string) => api.get(`/action-items/${id}`),
+  
+  create: (data: any) => api.post('/action-items', data),
+  
+  update: (id: string, data: any) => api.put(`/action-items/${id}`, data),
+  
   updateStatus: (id: string, status: string) =>
     api.patch(`/action-items/${id}/status`, { status }),
   
-  update: (id: string, data: any) => api.put(`/action-items/${id}`, data),
+  delete: (id: string) => api.delete(`/action-items/${id}`),
 };
 
 // Dashboard API
