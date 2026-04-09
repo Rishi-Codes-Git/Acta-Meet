@@ -35,13 +35,13 @@ async function matchAssigneeToUser(
   
   const nameLower = assigneeName.toLowerCase().trim();
   
-  // First, try to match with participants of this meeting
+  // First, try to match with participants of this meeting (by name or email)
   const participantResult = await query(
     `SELECT p.user_id, p.name, p.email, u.name as user_name 
      FROM participants p 
      LEFT JOIN users u ON p.user_id = u.id
      WHERE p.meeting_id = $1 
-       AND (LOWER(p.name) LIKE $2 OR LOWER(u.name) LIKE $2)`,
+       AND (LOWER(p.name) LIKE $2 OR LOWER(u.name) LIKE $2 OR LOWER(p.email) LIKE $2 OR LOWER(u.email) LIKE $2)`,
     [meetingId, `%${nameLower}%`]
   );
   
@@ -53,9 +53,9 @@ async function matchAssigneeToUser(
     };
   }
   
-  // If not found in participants, search all users
+  // If not found in participants, search all users (by name or email)
   const userResult = await query(
-    `SELECT id, name FROM users WHERE LOWER(name) LIKE $1`,
+    `SELECT id, name FROM users WHERE LOWER(name) LIKE $1 OR LOWER(email) LIKE $1`,
     [`%${nameLower}%`]
   );
   

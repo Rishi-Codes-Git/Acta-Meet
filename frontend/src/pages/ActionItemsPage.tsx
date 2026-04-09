@@ -438,8 +438,8 @@ export default function ActionItemsPage() {
       const assignedData = assignedRes.data as ActionItemsResponse;
 
       setActionItems(Array.isArray(allData) ? allData : (allData?.all || []));
-      setMyActionItems(Array.isArray(myData) ? myData : (myData?.my_tasks || []));
-      setAssignedByMe(Array.isArray(assignedData) ? assignedData : (assignedData?.assigned_by_me || []));
+      setMyActionItems(Array.isArray(myData) ? myData : (myData?.all || []));
+      setAssignedByMe(Array.isArray(assignedData) ? assignedData : (assignedData?.all || []));
     } catch (error) {
       console.error('Failed to load action items:', error);
       toast.error('Failed to load action items');
