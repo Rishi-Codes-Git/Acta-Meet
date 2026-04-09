@@ -11,7 +11,23 @@ export type MeetingType =
 export type PriorityLevel = 'high' | 'medium' | 'low';
 export type ActionStatus = 'pending' | 'in_progress' | 'completed' | 'blocked';
 export type NotificationType = 'task_assigned' | 'task_updated' | 'deadline_reminder' | 'mom_generated';
-export type UserRole = 'admin' | 'manager' | 'member';
+
+// Corporate role hierarchy (higher number = higher rank)
+export type UserRole = 'intern' | 'associate' | 'team_lead' | 'manager' | 'executive' | 'admin';
+export type TeamMemberRole = 'member' | 'lead' | 'manager' | 'admin';
+export type ParticipantRole = 'attendee' | 'presenter' | 'organizer';
+
+// Role permission levels for action item creation
+export const RolePermissionLevel: Record<UserRole, number> = {
+  'intern': 0,
+  'associate': 1,
+  'team_lead': 2,
+  'manager': 3,
+  'executive': 4,
+  'admin': 5,
+};
+
+export const MinimumRoleForActionItem = 2; // team_lead and above
 
 // Database Models
 export interface User {

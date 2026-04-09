@@ -36,6 +36,16 @@ function parseDeadline(deadlineStr: string | undefined): string | null {
   
   if (!cleaned || cleaned === 'null' || cleaned === 'undefined') return null;
   
+  // Check if it's already in YYYY-MM-DD format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateRegex.test(cleaned)) {
+    // Validate the date is real
+    const date = new Date(cleaned + 'T00:00:00Z');
+    if (!isNaN(date.getTime())) {
+      return cleaned; // Already correct format
+    }
+  }
+  
   // Try to parse as date
   const date = new Date(cleaned);
   if (isNaN(date.getTime())) return null;

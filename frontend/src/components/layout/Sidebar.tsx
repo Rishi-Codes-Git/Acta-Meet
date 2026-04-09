@@ -14,11 +14,11 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Meetings', href: '/meetings', icon: Calendar },
   { name: 'Action Items', href: '/action-items', icon: CheckSquare },
-  // { name: 'Teams', href: '/teams', icon: Users },
+  { name: 'Teams', href: '/teams', icon: Users },
 ];
 
 const secondaryNav = [
-  // { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -73,12 +73,6 @@ export default function Sidebar() {
           </NavLink>
         ))}
 
-        {/* <div className="pt-6 pb-2">
-          <p className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Settings
-          </p>
-        </div>
-
         {secondaryNav.map((item) => (
           <NavLink
             key={item.name}
@@ -94,7 +88,7 @@ export default function Sidebar() {
             <item.icon className="w-5 h-5" />
             {item.name}
           </NavLink>
-        ))} */}
+        ))}
       </nav>
 
       {/* User Profile */}

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { query } from '../db';
 import { AuthRequest, optionalAuth, authMiddleware } from '../middleware/auth';
+import { canCreateActionItems } from '../middleware/permissions';
 import { notifyTaskAssigned, notifyTaskUpdated } from '../services/notificationService';
 import { triggerTaskCreatedAutomation, triggerTaskUpdatedAutomation } from '../services/n8nAutomation';
 
@@ -311,7 +312,7 @@ router.delete('/:id', async (req: AuthRequest, res: Response) => {
 });
 
 // Create action item manually (with user assignment)
-router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
+router.post('/', authMiddleware, canCreateActionItems, async (req: AuthRequest, res: Response) => {
   try {
     const { meeting_id, title, description, assignee_name, assignee_id, priority, deadline } = req.body;
     

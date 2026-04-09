@@ -9,6 +9,8 @@ import NewMeetingPage from '@/pages/NewMeetingPage';
 import MeetingDetailPage from '@/pages/MeetingDetailPage';
 import MeetingsPage from '@/pages/MeetingsPage';
 import ActionItemsPage from '@/pages/ActionItemsPage';
+import TeamsPage from '@/pages/TeamsPage';
+import SettingsPage from '@/pages/SettingsPage';
 
 // Protected Route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -113,6 +115,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ActionItemsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/teams"
+          element={
+            <ProtectedRoute>
+              <TeamsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <SettingsPage />
             </ProtectedRoute>
           }
         />

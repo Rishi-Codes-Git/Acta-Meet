@@ -37,12 +37,13 @@ CREATE TYPE action_status AS ENUM ('pending', 'in_progress', 'completed', 'block
 CREATE TYPE notification_type AS ENUM ('task_assigned', 'task_updated', 'deadline_reminder', 'mom_generated');
 
 -- Users table (enhanced with role)
+-- Valid roles: intern, associate, team_lead, manager, executive, admin
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'member',
+    role VARCHAR(50) DEFAULT 'associate',
     avatar_url VARCHAR(500),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
@@ -58,6 +59,7 @@ CREATE TABLE teams (
 );
 
 -- Team members (many-to-many)
+-- Valid roles: member, lead, manager, admin
 CREATE TABLE team_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
@@ -84,6 +86,7 @@ CREATE TABLE meetings (
 );
 
 -- Participants table (enhanced - linked to users)
+-- Valid roles: attendee, presenter, organizer
 CREATE TABLE participants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     meeting_id UUID REFERENCES meetings(id) ON DELETE CASCADE,
