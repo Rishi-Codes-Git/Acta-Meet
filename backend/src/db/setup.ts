@@ -2,6 +2,11 @@ import { pool } from './index';
 
 const schema = `
 -- Drop existing tables (for fresh setup)
+DROP TABLE IF EXISTS webhook_events CASCADE;
+DROP TABLE IF EXISTS external_task_mappings CASCADE;
+DROP TABLE IF EXISTS integration_config CASCADE;
+DROP TABLE IF EXISTS trello_connections CASCADE;
+DROP TABLE IF EXISTS jira_connections CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS transcriptions CASCADE;
 DROP TABLE IF EXISTS mom_documents CASCADE;
@@ -131,6 +136,10 @@ CREATE TABLE action_items (
     status action_status DEFAULT 'pending',
     deadline DATE,
     completed_at TIMESTAMP,
+    external_source VARCHAR(50),
+    external_id VARCHAR(255),
+    sync_status VARCHAR(50) DEFAULT 'not_synced',
+    last_synced_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -167,6 +176,76 @@ CREATE TABLE notifications (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Jira OAuth Connections
+CREATE TABLE jira_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    workspace_url VARCHAR(255) NOT NULL,
+    oauth_token TEXT NOT NULL,
+    oauth_refresh_token TEXT,
+    token_expires_at TIMESTAMP,
+    scope TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, workspace_url)
+);
+
+-- Trello OAuth Connections
+CREATE TABLE trello_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    oauth_token TEXT NOT NULL,
+    workspace_id VARCHAR(255) NOT NULL,
+    workspace_name VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id)
+);
+
+-- Map Acta action items to external tasks
+CREATE TABLE external_task_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    action_item_id UUID NOT NULL REFERENCES action_items(id) ON DELETE CASCADE,
+    external_source VARCHAR(50) NOT NULL,
+    external_id VARCHAR(255) NOT NULL,
+    external_url VARCHAR(500),
+    external_key VARCHAR(100),
+    synced_at TIMESTAMP DEFAULT NOW(),
+    last_synced_at TIMESTAMP,
+    sync_direction VARCHAR(50) DEFAULT 'bidirectional',
+    sync_status VARCHAR(50) DEFAULT 'synced',
+    sync_error_message TEXT,
+    UNIQUE(action_item_id, external_source),
+    UNIQUE(external_source, external_id)
+);
+
+-- Log webhook events
+CREATE TABLE webhook_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    external_source VARCHAR(50) NOT NULL,
+    event_type VARCHAR(100),
+    payload JSONB,
+    processed BOOLEAN DEFAULT FALSE,
+    processed_at TIMESTAMP,
+    error_message TEXT,
+    received_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Sync configuration per team
+CREATE TABLE integration_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+    external_source VARCHAR(50),
+    enabled BOOLEAN DEFAULT FALSE,
+    auto_sync BOOLEAN DEFAULT TRUE,
+    sync_all_projects BOOLEAN DEFAULT TRUE,
+    selected_projects JSONB,
+    field_mapping JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(team_id, external_source)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_meetings_date ON meetings(meeting_date);
 CREATE INDEX idx_meetings_type ON meetings(type);
@@ -177,12 +256,21 @@ CREATE INDEX idx_action_items_deadline ON action_items(deadline);
 CREATE INDEX idx_action_items_meeting ON action_items(meeting_id);
 CREATE INDEX idx_action_items_assignee ON action_items(assignee_id);
 CREATE INDEX idx_action_items_assigned_by ON action_items(assigned_by);
+CREATE INDEX idx_action_items_external ON action_items(external_source, external_id);
+CREATE INDEX idx_action_items_sync_status ON action_items(sync_status);
 CREATE INDEX idx_participants_meeting ON participants(meeting_id);
 CREATE INDEX idx_participants_user ON participants(user_id);
 CREATE INDEX idx_notifications_user ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(user_id, read);
 CREATE INDEX idx_team_members_user ON team_members(user_id);
 CREATE INDEX idx_team_members_team ON team_members(team_id);
+CREATE INDEX idx_jira_connections_user ON jira_connections(user_id);
+CREATE INDEX idx_trello_connections_user ON trello_connections(user_id);
+CREATE INDEX idx_external_mappings_action_item ON external_task_mappings(action_item_id);
+CREATE INDEX idx_external_mappings_source ON external_task_mappings(external_source, external_id);
+CREATE INDEX idx_webhook_events_source ON webhook_events(external_source);
+CREATE INDEX idx_webhook_events_processed ON webhook_events(processed);
+CREATE INDEX idx_integration_config_team ON integration_config(team_id);
 `;
 
 async function setup() {

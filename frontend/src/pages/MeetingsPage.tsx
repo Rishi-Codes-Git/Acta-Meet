@@ -1,17 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
-  Users,
   Search,
   Filter,
   ChevronRight,
   Loader2,
   FileText,
   CheckCircle2,
-  AlertCircle,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout';
 import { meetingsApi } from '@/services/api';
@@ -87,6 +86,7 @@ export default function MeetingsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [deletingMeetingId, setDeletingMeetingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadMeetings();
@@ -106,6 +106,23 @@ export default function MeetingsPage() {
       toast.error('Failed to load meetings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteMeeting = async (meetingId: string, meetingTitle: string) => {
+    const confirmed = window.confirm(`Delete "${meetingTitle}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      setDeletingMeetingId(meetingId);
+      await meetingsApi.delete(meetingId);
+      setMeetings((prev) => prev.filter((meeting) => meeting.id !== meetingId));
+      toast.success('Meeting deleted');
+    } catch (error: any) {
+      console.error('Failed to delete meeting:', error);
+      toast.error(error.response?.data?.error || 'Failed to delete meeting');
+    } finally {
+      setDeletingMeetingId(null);
     }
   };
 
@@ -136,7 +153,7 @@ export default function MeetingsPage() {
   );
 
   return (
-    <MainLayout>
+    <MainLayout title="Meetings" subtitle="View and manage all your meetings">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -251,11 +268,13 @@ export default function MeetingsPage() {
                   {groupedMeetings[dateStr].map((meeting) => (
                     <div
                       key={meeting.id}
-                      onClick={() => navigate(`/meetings/${meeting.id}`)}
-                      className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-[#42A090]/30 transition-all cursor-pointer group"
+                      className="bg-white rounded-xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-[#42A090]/30 transition-all group"
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                        <div
+                          onClick={() => navigate(`/meetings/${meeting.id}`)}
+                          className="flex-1 cursor-pointer"
+                        >
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-lg font-semibold text-slate-900 group-hover:text-[#42A090] transition-colors">
                               {meeting.title}
@@ -306,7 +325,25 @@ export default function MeetingsPage() {
                           </div>
                         </div>
 
-                        <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-[#42A090] group-hover:translate-x-1 transition-all flex-shrink-0" />
+                        <div className="flex items-center gap-1 ml-3">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteMeeting(meeting.id, meeting.title)}
+                            disabled={deletingMeetingId === meeting.id}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-60"
+                            title="Delete meeting"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/meetings/${meeting.id}`)}
+                            className="p-2 text-slate-400 hover:text-[#42A090] hover:bg-teal-50 rounded-lg transition-colors"
+                            title="View meeting"
+                          >
+                            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}

@@ -40,7 +40,8 @@
 ### Backend
 - **Node.js** + Express + TypeScript
 - **PostgreSQL** database
-- **OpenAI API** (GPT-4o-mini, Whisper)
+- **Ollama** (llama3.2, local LLM)
+- **n8n** automation (Jira + Trello sync)
 - **JWT** authentication
 - **PDFKit** & **docx** for document generation
 

@@ -2,6 +2,7 @@ import { query } from '../db';
 import { summarizeDiscussion, extractMeetingInsights } from './openai';
 import { generatePDF, generateDocx } from './documentGenerator';
 import { createNotification } from './notificationService';
+import { triggerTaskCreatedAutomation } from './n8nAutomation';
 import { MomContent, Meeting, Participant, AgendaItem, DiscussionPoint, Decision, ActionItem } from '../types';
 
 // Parse deadline from AI response
@@ -135,6 +136,8 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       
       const actionItem = result.rows[0];
       action_items.push(actionItem);
+
+      await triggerTaskCreatedAutomation(actionItem.id, 'mom_generation');
       
       // Send notification to assignee if they have a user account
       if (assigneeMatch.user_id) {

@@ -11,6 +11,7 @@ import transcribeRoutes from './routes/transcribe';
 import notificationRoutes from './routes/notifications';
 import userRoutes from './routes/users';
 import teamRoutes from './routes/teams';
+import integrationRoutes from './routes/integrations';
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/v1/transcribe', transcribeRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/teams', teamRoutes);
+app.use('/api/v1/integrations', integrationRoutes);
 
 // Error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

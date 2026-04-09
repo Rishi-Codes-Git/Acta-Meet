@@ -139,18 +139,30 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     // Add participants (with user_id matching)
     if (data.participants && data.participants.length > 0) {
       for (const p of data.participants) {
+        const normalizedName = p.name.trim();
+        const normalizedEmail = p.email?.trim().toLowerCase() || null;
+
+        if (!normalizedName) {
+          continue;
+        }
+
         // Try to match participant email to existing user
         let userId = p.user_id || null;
-        if (!userId && p.email) {
-          const userResult = await query('SELECT id FROM users WHERE email = $1', [p.email]);
+        if (!userId && normalizedEmail) {
+          const userResult = await query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
           if (userResult.rows.length > 0) {
             userId = userResult.rows[0].id;
           }
         }
         
         await query(
-          'INSERT INTO participants (meeting_id, user_id, name, email, role) VALUES ($1, $2, $3, $4, $5)',
-          [meeting.id, userId, p.name, p.email, p.role || 'attendee']
+          `INSERT INTO participants (meeting_id, user_id, name, email, role)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (meeting_id, email) DO UPDATE
+           SET user_id = COALESCE(EXCLUDED.user_id, participants.user_id),
+               name = EXCLUDED.name,
+               role = EXCLUDED.role`,
+          [meeting.id, userId, normalizedName, normalizedEmail, p.role || 'attendee']
         );
       }
     }

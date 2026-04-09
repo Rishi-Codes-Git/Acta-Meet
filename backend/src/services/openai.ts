@@ -1,5 +1,12 @@
 import { config } from '../config';
 import { AIExtractionResult, PriorityLevel } from '../types';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { promisify } from 'util';
+import { execFile } from 'child_process';
+import ffmpegPath from 'ffmpeg-static';
+import { WaveFile } from 'wavefile';
 
 // Ollama API endpoint
 const OLLAMA_URL = config.ollama?.url || 'http://localhost:11434';
@@ -11,20 +18,102 @@ interface OllamaResponse {
   done: boolean;
 }
 
+const execFileAsync = promisify(execFile);
+let asrPipelinePromise: Promise<any> | null = null;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function isConnectionRefusedError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const maybeCause = error as Error & { cause?: unknown };
+  if ((maybeCause.cause as { code?: string } | undefined)?.code === 'ECONNREFUSED') {
+    return true;
+  }
+
+  const cause = maybeCause.cause as { errors?: Array<{ code?: string }> } | undefined;
+  return Array.isArray(cause?.errors) && cause.errors.some((e) => e?.code === 'ECONNREFUSED');
+}
+
+async function getAsrPipeline() {
+  if (!asrPipelinePromise) {
+    asrPipelinePromise = (async () => {
+      const transformers = await import('@xenova/transformers');
+      transformers.env.allowLocalModels = true;
+      transformers.env.allowRemoteModels = true;
+
+      return transformers.pipeline(
+        'automatic-speech-recognition',
+        config.stt.model
+      );
+    })();
+  }
+
+  return asrPipelinePromise;
+}
+
+async function convertToWav16kMono(inputPath: string): Promise<string> {
+  if (!ffmpegPath) {
+    throw new Error('ffmpeg executable not found');
+  }
+
+  const tempWavPath = path.join(
+    os.tmpdir(),
+    `acta_stt_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
+  );
+
+  await execFileAsync(ffmpegPath, [
+    '-y',
+    '-i',
+    inputPath,
+    '-ac',
+    '1',
+    '-ar',
+    '16000',
+    '-f',
+    'wav',
+    tempWavPath,
+  ]);
+
+  return tempWavPath;
+}
+
+function readWavAsFloat32(wavPath: string): Float32Array {
+  const wavBuffer = fs.readFileSync(wavPath);
+  const wav = new WaveFile(wavBuffer);
+
+  wav.toBitDepth('32f');
+  wav.toSampleRate(16000);
+
+  const samples = wav.getSamples(false, Float32Array) as Float64Array | Float32Array;
+  return samples instanceof Float32Array ? samples : new Float32Array(samples);
+}
+
 // Helper to call Ollama
 async function callOllama(prompt: string, systemPrompt?: string): Promise<string> {
-  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt: systemPrompt ? `${systemPrompt}\n\nUser: ${prompt}` : prompt,
-      stream: false,
-      options: {
-        temperature: 0.3,
-      },
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt: systemPrompt ? `${systemPrompt}\n\nUser: ${prompt}` : prompt,
+        stream: false,
+        options: {
+          temperature: 0.3,
+        },
+      }),
+    });
+  } catch (error) {
+    if (isConnectionRefusedError(error)) {
+      throw new Error(`Ollama is not reachable at ${OLLAMA_URL}. Start Ollama and try again.`);
+    }
+    throw new Error(`Failed to call Ollama: ${getErrorMessage(error)}`);
+  }
 
   if (!response.ok) {
     throw new Error(`Ollama error: ${response.status} ${response.statusText}`);
@@ -54,7 +143,7 @@ Keep it concise and professional.`;
   try {
     return await callOllama(prompt, systemPrompt);
   } catch (error) {
-    console.error('Ollama summarize error:', error);
+    console.warn(`Ollama summary unavailable: ${getErrorMessage(error)}`);
     return 'Unable to generate summary. Please ensure Ollama is running.';
   }
 }
@@ -120,17 +209,41 @@ Rules:
       })),
     };
   } catch (error) {
-    console.error('Failed to parse Ollama response:', error);
+    console.warn(`Ollama insights unavailable: ${getErrorMessage(error)}`);
     return { summary: '', decisions: [], action_items: [] };
   }
 }
 
 // Transcribe audio - for now returns placeholder (whisper.cpp integration later)
 export async function transcribeAudio(audioFilePath: string): Promise<string> {
-  // TODO: Integrate with whisper.cpp for local transcription
-  // For now, we'll return a message indicating manual transcription is needed
   console.log('Audio transcription requested for:', audioFilePath);
-  return `[Audio transcription is not yet available locally. Please paste the meeting notes manually or integrate whisper.cpp for local transcription.]`;
+
+  let tempWavPath: string | null = null;
+  try {
+    tempWavPath = await convertToWav16kMono(audioFilePath);
+    const audioData = readWavAsFloat32(tempWavPath);
+    const asr = await getAsrPipeline();
+
+    const result = await asr(audioData, {
+      chunk_length_s: config.stt.chunkLengthSeconds,
+      stride_length_s: config.stt.strideLengthSeconds,
+      return_timestamps: false,
+    });
+
+    const text = typeof result?.text === 'string' ? result.text.trim() : '';
+    if (!text) {
+      throw new Error('No transcription text returned');
+    }
+
+    return text;
+  } catch (error) {
+    console.error('Local transcription error:', error);
+    throw new Error('Failed to transcribe audio locally. Ensure ffmpeg is available and STT model can be loaded.');
+  } finally {
+    if (tempWavPath && fs.existsSync(tempWavPath)) {
+      fs.unlinkSync(tempWavPath);
+    }
+  }
 }
 
 // Check if Ollama is running

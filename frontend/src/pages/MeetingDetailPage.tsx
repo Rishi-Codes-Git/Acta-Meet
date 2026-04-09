@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
-  Edit,
   Trash2,
   User,
   Target,
@@ -132,6 +131,7 @@ export default function MeetingDetailPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [meetingData, setMeetingData] = useState<MeetingDetailResponse | null>(null);
 
   useEffect(() => {
@@ -144,7 +144,6 @@ export default function MeetingDetailPage() {
     try {
       setLoading(true);
       const response = await meetingsApi.getById(id!);
-      console.log('Meeting data received:', response.data); // Debug log
       setMeetingData(response.data);
     } catch (error: any) {
       console.error('Failed to load meeting:', error);
@@ -213,9 +212,28 @@ export default function MeetingDetailPage() {
     }
   };
 
+  const handleDeleteMeeting = async () => {
+    if (!meetingData) return;
+
+    const confirmed = window.confirm(`Delete "${meetingData.title}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      setDeleting(true);
+      await meetingsApi.delete(meetingData.id);
+      toast.success('Meeting deleted');
+      navigate('/meetings');
+    } catch (error: any) {
+      console.error('Failed to delete meeting:', error);
+      toast.error(error.response?.data?.error || 'Failed to delete meeting');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
-      <MainLayout>
+      <MainLayout title="Meeting Details">
         <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="w-8 h-8 animate-spin text-[#42A090]" />
         </div>
@@ -225,7 +243,7 @@ export default function MeetingDetailPage() {
 
   if (!meetingData) {
     return (
-      <MainLayout>
+      <MainLayout title="Meeting Details">
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
           <AlertCircle className="w-16 h-16 text-slate-300 mb-4" />
           <h2 className="text-xl font-semibold text-slate-700">Meeting not found</h2>
@@ -243,22 +261,19 @@ export default function MeetingDetailPage() {
   // Destructure directly from the flat response
   const {
     title,
-    type,
     objective,
     meeting_date,
     duration_minutes,
     location,
-    status,
     participants,
     agenda_items,
     discussion_points,
-    decisions,
-    action_items,
     mom,
+    action_items,
   } = meetingData;
 
   return (
-    <MainLayout>
+    <MainLayout title={title} subtitle="Meeting details and generated MoM">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -300,6 +315,14 @@ export default function MeetingDetailPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleDeleteMeeting}
+                disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-60"
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                <span>{deleting ? 'Deleting...' : 'Delete'}</span>
+              </button>
               {mom ? (
                 <>
                   <button

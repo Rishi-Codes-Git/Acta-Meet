@@ -19,7 +19,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout';
-import { meetingsApi } from '@/services/api';
+import { meetingsApi, transcribeApi } from '@/services/api';
 import toast from 'react-hot-toast';
 
 const meetingSchema = z.object({
@@ -57,6 +57,7 @@ export default function NewMeetingPage() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [inputMode, setInputMode] = useState<'text' | 'audio'>('text');
   const [audioFile, setAudioFile] = useState<File | null>(null);
 
@@ -65,6 +66,7 @@ export default function NewMeetingPage() {
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<MeetingForm>({
     resolver: zodResolver(meetingSchema),
@@ -88,9 +90,47 @@ export default function NewMeetingPage() {
 
   const discussionText = watch('discussion_text');
 
+  const transcribeSelectedAudio = async (): Promise<string | null> => {
+    if (!audioFile) {
+      toast.error('Please select an audio file first');
+      return null;
+    }
+
+    setIsTranscribing(true);
+    try {
+      const response = await transcribeApi.upload(audioFile);
+      const transcription = response.data?.transcription;
+
+      if (!transcription || !transcription.trim()) {
+        toast.error('Transcription came back empty');
+        return null;
+      }
+
+      setValue('discussion_text', transcription, { shouldDirty: true, shouldValidate: true });
+      setInputMode('text');
+      toast.success('Audio transcribed and added to discussion notes');
+      return transcription;
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to transcribe audio');
+      return null;
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   const onSubmit = async (data: MeetingForm) => {
     setIsSubmitting(true);
     try {
+      let discussionTextValue = data.discussion_text || '';
+      if ((!discussionTextValue || !discussionTextValue.trim()) && inputMode === 'audio' && audioFile) {
+        const transcription = await transcribeSelectedAudio();
+        if (!transcription) {
+          setIsSubmitting(false);
+          return;
+        }
+        discussionTextValue = transcription;
+      }
+
       // Combine date and time
       const meetingDateTime = `${data.meeting_date}T${data.meeting_time}:00`;
 
@@ -103,7 +143,7 @@ export default function NewMeetingPage() {
         location: data.location,
         participants: data.participants.filter(p => p.name.trim()),
         agenda_items: data.agenda_items?.filter(a => a.title.trim()).map(a => ({ title: a.title })),
-        discussion_points: data.discussion_text ? [{ content: data.discussion_text }] : [],
+        discussion_points: discussionTextValue ? [{ content: discussionTextValue }] : [],
       };
 
       const response = await meetingsApi.create(meetingData);
@@ -112,7 +152,7 @@ export default function NewMeetingPage() {
       toast.success('Meeting created successfully!');
 
       // If there's discussion text, offer to generate MoM
-      if (data.discussion_text && data.discussion_text.trim().length > 50) {
+      if (discussionTextValue && discussionTextValue.trim().length > 50) {
         setIsGenerating(true);
         try {
           await meetingsApi.generateMom(meetingId);
@@ -151,7 +191,7 @@ export default function NewMeetingPage() {
         Back
       </button>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="max-w-4xl">
+      <form onSubmit={handleSubmit(onSubmit)} className="w-full">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Form - 2 columns */}
           <div className="lg:col-span-2 space-y-6">
@@ -186,11 +226,11 @@ export default function NewMeetingPage() {
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Meeting Type *
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {meetingTypes.map((type) => (
                       <label
                         key={type.value}
-                        className={`flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all ${
+                        className={`min-h-[72px] p-3 border-2 rounded-xl cursor-pointer transition-all ${
                           watch('type') === type.value
                             ? 'border-[#42A090] bg-[#42A090]/5'
                             : 'border-slate-200 hover:border-slate-300'
@@ -202,8 +242,12 @@ export default function NewMeetingPage() {
                           {...register('type')}
                           className="sr-only"
                         />
-                        <span className="text-lg">{type.icon}</span>
-                        <span className="text-sm font-medium text-slate-700">{type.label}</span>
+                        <div className="flex items-center gap-2 w-full min-w-0">
+                          <span className="text-lg leading-none flex-shrink-0">{type.icon}</span>
+                          <span className="text-sm font-medium text-slate-700 leading-tight break-words">
+                            {type.label}
+                          </span>
+                        </div>
                       </label>
                     ))}
                   </div>
@@ -455,6 +499,14 @@ John: Great. Let's also review the client feedback from last sprint..."
                       </>
                     )}
                   </label>
+                  <button
+                    type="button"
+                    disabled={!audioFile || isTranscribing || isSubmitting}
+                    onClick={() => void transcribeSelectedAudio()}
+                    className="mt-5 px-4 py-2 rounded-lg bg-[#42A090] text-white text-sm font-semibold hover:bg-[#389080] disabled:opacity-60"
+                  >
+                    {isTranscribing ? 'Transcribing...' : 'Transcribe Audio'}
+                  </button>
                 </div>
               )}
             </div>

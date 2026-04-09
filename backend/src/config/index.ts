@@ -3,7 +3,7 @@ dotenv.config();
 
 export const config = {
   appName: 'Acta',
-  port: process.env.PORT || 3000,
+  port: process.env.PORT || 3001,
   nodeEnv: process.env.NODE_ENV || 'development',
   
   database: {
@@ -20,10 +20,20 @@ export const config = {
     url: process.env.OLLAMA_URL || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'llama3.2',
   },
+
+  // Local speech-to-text
+  stt: {
+    model: process.env.STT_MODEL || 'Xenova/whisper-small',
+    chunkLengthSeconds: parseInt(process.env.STT_CHUNK_LENGTH_SECONDS || '30'),
+    strideLengthSeconds: parseInt(process.env.STT_STRIDE_LENGTH_SECONDS || '5'),
+  },
   
-  // OpenAI (optional, for cloud fallback)
-  openai: {
-    apiKey: process.env.OPENAI_API_KEY || '',
+  // n8n automation webhooks
+  n8n: {
+    enabled: process.env.N8N_ENABLED === 'true',
+    webhookUrl: process.env.N8N_WEBHOOK_URL || '',
+    taskCreatedPath: process.env.N8N_TASK_CREATED_PATH || '/task-created',
+    taskUpdatedPath: process.env.N8N_TASK_UPDATED_PATH || '/task-updated',
   },
   
   upload: {

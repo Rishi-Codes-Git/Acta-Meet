@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { query } from '../db';
 import { AuthRequest, optionalAuth, authMiddleware } from '../middleware/auth';
 import { notifyTaskAssigned, notifyTaskUpdated } from '../services/notificationService';
+import { triggerTaskCreatedAutomation, triggerTaskUpdatedAutomation } from '../services/n8nAutomation';
 
 const router = Router();
 
@@ -232,6 +233,18 @@ router.put('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
     if (status && status !== oldItem.status && updated.assignee_id) {
       await notifyTaskUpdated(updated.assignee_id, updated.title, id, status);
     }
+
+    const changedFields: string[] = [];
+    if (title !== undefined && title !== oldItem.title) changedFields.push('title');
+    if (description !== undefined && description !== oldItem.description) changedFields.push('description');
+    if (assignee_name !== undefined && assignee_name !== oldItem.assignee_name) changedFields.push('assignee_name');
+    if (assignee_id !== undefined && assignee_id !== oldItem.assignee_id) changedFields.push('assignee_id');
+    if (priority !== undefined && priority !== oldItem.priority) changedFields.push('priority');
+    if (status !== undefined && status !== oldItem.status) changedFields.push('status');
+    if (deadline !== undefined && deadline !== oldItem.deadline) changedFields.push('deadline');
+    if (changedFields.length > 0) {
+      await triggerTaskUpdatedAutomation(updated.id, changedFields, 'manual_update');
+    }
     
     res.json(updated);
   } catch (error) {
@@ -269,6 +282,8 @@ router.patch('/:id/status', optionalAuth, async (req: AuthRequest, res: Response
     if (updated.assignee_id) {
       await notifyTaskUpdated(updated.assignee_id, updated.title, id, status);
     }
+
+    await triggerTaskUpdatedAutomation(updated.id, ['status'], 'status_patch');
     
     res.json(updated);
   } catch (error) {
@@ -312,6 +327,8 @@ router.post('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     if (assignee_id) {
       await notifyTaskAssigned(assignee_id, title, actionItem.id);
     }
+
+    await triggerTaskCreatedAutomation(actionItem.id, 'manual_create');
     
     res.status(201).json(actionItem);
   } catch (error) {

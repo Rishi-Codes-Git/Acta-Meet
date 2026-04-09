@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout';
 import { useAuthStore } from '@/store/authStore';
-import { dashboardApi, meetingsApi, actionItemsApi } from '@/services/api';
+import { meetingsApi, actionItemsApi } from '@/services/api';
 
 // Stat Card Component
 interface StatCardProps {
@@ -177,7 +177,21 @@ export default function DashboardPage() {
   const [myActionItems, setMyActionItems] = useState<ActionItem[]>([]);
 
   useEffect(() => {
-    loadDashboardData();
+    void loadDashboardData();
+
+    const onFocus = () => {
+      void loadDashboardData();
+    };
+
+    window.addEventListener('focus', onFocus);
+    const refreshTimer = window.setInterval(() => {
+      void loadDashboardData();
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(refreshTimer);
+    };
   }, []);
 
   const loadDashboardData = async () => {
@@ -189,8 +203,16 @@ export default function DashboardPage() {
         actionItemsApi.getMy().catch(() => ({ data: [] })),
       ]);
 
-      const meetings = meetingsRes.data || [];
-      const actionItems = actionItemsRes.data || [];
+      const meetingsPayload = meetingsRes.data;
+      const actionItemsPayload = actionItemsRes.data;
+
+      const meetings: Meeting[] = Array.isArray(meetingsPayload)
+        ? meetingsPayload
+        : (meetingsPayload?.meetings || []);
+
+      const actionItems: ActionItem[] = Array.isArray(actionItemsPayload)
+        ? actionItemsPayload
+        : (actionItemsPayload?.all || []);
 
       setRecentMeetings(meetings.slice(0, 5));
       setMyActionItems(actionItems.slice(0, 5));
