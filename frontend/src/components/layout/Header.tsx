@@ -1,6 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { notificationsApi } from '@/services/api';
+
+interface Notification {
+  id: string;
+  title: string;
+  message?: string;
+  type: string;
+  read: boolean;
+  created_at: string;
+  reference_type?: string;
+  reference_id?: string;
+}
 
 interface HeaderProps {
   title: string;
@@ -10,15 +22,50 @@ interface HeaderProps {
 export default function Header({ title, subtitle }: HeaderProps) {
   const { user } = useAuthStore();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock notifications (will connect to backend later)
-  const notifications = [
-    { id: 1, title: 'New task assigned', message: 'Review API documentation', time: '5m ago', unread: true },
-    { id: 2, title: 'Meeting starting soon', message: 'Sprint Planning at 3:00 PM', time: '1h ago', unread: true },
-    { id: 3, title: 'Task completed', message: 'Database schema review done', time: '2h ago', unread: false },
-  ];
+  useEffect(() => {
+    void loadNotifications();
+    
+    // Refresh notifications every 30 seconds
+    const interval = setInterval(() => {
+      void loadNotifications();
+    }, 30000);
 
-  const unreadCount = notifications.filter(n => n.unread).length;
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadNotifications = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const res = await notificationsApi.getMy();
+      const notifs = res.data || [];
+      setNotifications(Array.isArray(notifs) ? notifs : []);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
@@ -67,25 +114,33 @@ export default function Header({ title, subtitle }: HeaderProps) {
                     <h3 className="font-semibold text-slate-900">Notifications</h3>
                   </div>
                   <div className="max-h-80 overflow-y-auto">
-                    {notifications.map((notif) => (
-                      <div
-                        key={notif.id}
-                        className={`p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors ${
-                          notif.unread ? 'bg-teal-50/50' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          {notif.unread && (
-                            <div className="w-2 h-2 rounded-full bg-[#42A090] mt-2 flex-shrink-0" />
-                          )}
-                          <div className={notif.unread ? '' : 'pl-5'}>
-                            <p className="text-sm font-medium text-slate-900">{notif.title}</p>
-                            <p className="text-sm text-slate-500">{notif.message}</p>
-                            <p className="text-xs text-slate-400 mt-1">{notif.time}</p>
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center text-slate-500">
+                        <p className="text-sm">No notifications yet</p>
+                      </div>
+                    ) : (
+                      notifications.map((notif) => (
+                        <div
+                          key={notif.id}
+                          className={`p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors ${
+                            !notif.read ? 'bg-teal-50/50' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {!notif.read && (
+                              <div className="w-2 h-2 rounded-full bg-[#42A090] mt-2 flex-shrink-0" />
+                            )}
+                            <div className={!notif.read ? '' : 'pl-5'}>
+                              <p className="text-sm font-medium text-slate-900">{notif.title}</p>
+                              {notif.message && (
+                                <p className="text-sm text-slate-500 line-clamp-2">{notif.message}</p>
+                              )}
+                              <p className="text-xs text-slate-400 mt-1">{formatTime(notif.created_at)}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                   <div className="p-3 bg-slate-50">
                     <button className="w-full text-sm text-[#42A090] hover:text-[#389080] font-medium">
