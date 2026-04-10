@@ -20,6 +20,9 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState('');
+  const [otpCode, setOtpCode] = useState('');
 
   const {
     register,
@@ -33,11 +36,36 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const response = await authApi.login(data);
+      if (response.data?.requires_2fa) {
+        setRequires2fa(true);
+        setPendingUserId(response.data.user_id);
+        toast.success('OTP sent to your email');
+        return;
+      }
       setAuth(response.data.user, response.data.token);
       toast.success('Welcome back!');
       navigate('/');
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyLoginOtp = async () => {
+    if (!pendingUserId || otpCode.length !== 6) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await authApi.verifyLogin2fa({ user_id: pendingUserId, otp: otpCode });
+      setAuth(response.data.user, response.data.token);
+      toast.success('Login successful');
+      navigate('/');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'OTP verification failed');
     } finally {
       setIsLoading(false);
     }
@@ -109,6 +137,7 @@ export default function LoginPage() {
               <p className="text-slate-500 mt-2">Sign in to your account</p>
             </div>
 
+            {!requires2fa ? (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               {/* Email Field */}
               <div>
@@ -175,6 +204,51 @@ export default function LoginPage() {
                 )}
               </button>
             </form>
+            ) : (
+              <div className="space-y-6">
+                <div className="p-4 bg-teal-50 rounded-xl border border-teal-200">
+                  <p className="text-sm font-medium text-teal-900 mb-1">📧 Two-Factor Verification</p>
+                  <p className="text-sm text-teal-700">Enter the 6-digit OTP sent to your email.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">OTP Code</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-full px-4 py-3.5 border-2 rounded-xl focus:ring-2 focus:ring-[#42A090]/20 focus:border-[#42A090] transition-all bg-slate-50 focus:bg-white border-slate-200 text-center text-xl tracking-widest"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVerifyLoginOtp}
+                  disabled={isLoading || otpCode.length !== 6}
+                  className="w-full bg-[#42A090] hover:bg-[#389080] text-white font-bold py-4 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    'Verify OTP & Sign In'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRequires2fa(false);
+                    setPendingUserId('');
+                    setOtpCode('');
+                  }}
+                  className="w-full text-slate-600 hover:text-slate-800 font-medium"
+                >
+                  Back to login
+                </button>
+              </div>
+            )}
 
             {/* Register Link */}
             <p className="text-center mt-8 text-slate-600">

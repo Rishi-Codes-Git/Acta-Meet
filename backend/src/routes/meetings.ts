@@ -18,7 +18,19 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     let paramIndex = 1;
     
     if (req.userId) {
-      sql += ` AND created_by = $${paramIndex}`;
+      sql += ` AND (
+        created_by = $${paramIndex}
+        OR EXISTS (
+          SELECT 1
+          FROM participants p
+          LEFT JOIN users me ON me.id = $${paramIndex}
+          WHERE p.meeting_id = meetings.id
+            AND (
+              p.user_id = $${paramIndex}
+              OR (me.email IS NOT NULL AND LOWER(p.email) = LOWER(me.email))
+            )
+        )
+      )`;
       params.push(req.userId);
       paramIndex++;
     }
@@ -52,7 +64,19 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     let countParamIndex = 1;
     
     if (req.userId) {
-      countSql += ` AND created_by = $${countParamIndex}`;
+      countSql += ` AND (
+        created_by = $${countParamIndex}
+        OR EXISTS (
+          SELECT 1
+          FROM participants p
+          LEFT JOIN users me ON me.id = $${countParamIndex}
+          WHERE p.meeting_id = meetings.id
+            AND (
+              p.user_id = $${countParamIndex}
+              OR (me.email IS NOT NULL AND LOWER(p.email) = LOWER(me.email))
+            )
+        )
+      )`;
       countParamIndex++;
     }
     if (type) {

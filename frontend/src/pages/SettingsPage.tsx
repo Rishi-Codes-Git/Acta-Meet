@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { useAuthStore } from '@/store/authStore';
 import { Upload, Lock, Shield, Eye, EyeOff, UserCircle2 } from 'lucide-react';
@@ -30,6 +30,10 @@ export default function SettingsPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isSavingTfa, setIsSavingTfa] = useState(false);
+
+  useEffect(() => {
+    setTwoFactorEnabled(user?.two_factor_enabled || false);
+  }, [user?.two_factor_enabled]);
 
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -182,6 +186,9 @@ export default function SettingsPage() {
     try {
       await twoFaApi.verifyOtp(tfaVerifyCode);
       setTwoFactorEnabled(true);
+      if (user) {
+        updateUser({ ...user, two_factor_enabled: true });
+      }
       setShowTwoFactorSetup(false);
       setTfaVerifyCode('');
       toast.success('Two-factor authentication enabled!');
@@ -202,6 +209,9 @@ export default function SettingsPage() {
     try {
       await twoFaApi.disable();
       setTwoFactorEnabled(false);
+      if (user) {
+        updateUser({ ...user, two_factor_enabled: false });
+      }
       toast.success('Two-factor authentication disabled');
     } catch (error: any) {
       toast.error(error.response?.data?.error || 'Failed to disable TFA');

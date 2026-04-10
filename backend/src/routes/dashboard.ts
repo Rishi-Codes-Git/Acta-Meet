@@ -116,8 +116,11 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res: Response) => {
       SELECT DISTINCT m.*,
         (SELECT COUNT(*) FROM action_items WHERE meeting_id = m.id AND assignee_id = $1) as my_action_count
       FROM meetings m
-      JOIN participants p ON m.id = p.meeting_id
-      WHERE p.user_id = $1
+      LEFT JOIN participants p ON m.id = p.meeting_id
+      LEFT JOIN users me ON me.id = $1
+      WHERE m.created_by = $1
+         OR p.user_id = $1
+         OR (me.email IS NOT NULL AND LOWER(p.email) = LOWER(me.email))
       ORDER BY m.meeting_date DESC
       LIMIT 10
     `, [req.userId]);
