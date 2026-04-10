@@ -24,43 +24,20 @@ function stripMarkdownFormatting(text: string | undefined): string {
     .trim();
 }
 
-// Parse deadline from AI response
-function parseDeadline(deadlineStr: string | undefined): string | null {
-  if (!deadlineStr) return null;
-  
-  // Clean up the string - remove "or null", "or undefined", extra quotes, etc.
-  const cleaned = deadlineStr
-    .toLowerCase()
-    .replace(/\s*(or|,)\s*(null|undefined|none|n\/a)/gi, '')
-    .trim()
-    .replace(/^["']|["']$/g, ''); // Remove quotes
-  
-  if (!cleaned || cleaned === 'null' || cleaned === 'undefined') return null;
-  
-  // Check if it's already in YYYY-MM-DD format
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (dateRegex.test(cleaned)) {
-    // Validate the date is real
-    const date = new Date(cleaned + 'T00:00:00Z');
-    if (!isNaN(date.getTime())) {
-      return cleaned; // Already correct format
-    }
-  }
-  
-  // Try to parse as date
-  const date = new Date(cleaned);
-  if (isNaN(date.getTime())) return null;
-  
-  // Return in YYYY-MM-DD format
-  return date.toISOString().split('T')[0];
+// Derive deadline from meeting date to keep deadlines consistent and predictable
+function deadlineFromMeetingDate(meetingDate: Date | string): string {
+  const base = new Date(meetingDate);
+  // Default: 7 days from meeting date
+  base.setDate(base.getDate() + 7);
+  return base.toISOString().split('T')[0];
 }
 
 // Match assignee name to participant/user
 async function matchAssigneeToUser(
   assigneeName: string, 
   meetingId: string
-): Promise<{ user_id: string | null; name: string }> {
-  if (!assigneeName) return { user_id: null, name: 'Unassigned' };
+): Promise<{ user_id: string | null; name: string; email: string | null }> {
+  if (!assigneeName) return { user_id: null, name: 'Unassigned', email: null };
   
   const nameLower = assigneeName.toLowerCase().trim();
   
@@ -78,25 +55,32 @@ async function matchAssigneeToUser(
     const match = participantResult.rows[0];
     return { 
       user_id: match.user_id, 
-      name: match.user_name || match.name 
+      name: match.user_name || match.name,
+      email: match.user_email || match.email || null,
     };
   }
   
   // If not found in participants, search all users (by name or email)
   const userResult = await query(
-    `SELECT id, name FROM users WHERE LOWER(name) LIKE $1 OR LOWER(email) LIKE $1`,
+    `SELECT id, name, email FROM users WHERE LOWER(name) LIKE $1 OR LOWER(email) LIKE $1`,
     [`%${nameLower}%`]
   );
   
   if (userResult.rows.length > 0) {
     return { 
       user_id: userResult.rows[0].id, 
-      name: userResult.rows[0].name 
+      name: userResult.rows[0].name,
+      email: userResult.rows[0].email || null,
     };
   }
   
+  // If assignee text itself is an email, use it directly
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(assigneeName.trim())) {
+    return { user_id: null, name: assigneeName.trim(), email: assigneeName.trim() };
+  }
+
   // No match found - keep original name without user_id
-  return { user_id: null, name: assigneeName };
+  return { user_id: null, name: assigneeName, email: null };
 }
 
 export async function generateMoM(meetingId: string, generatedBy?: string): Promise<MomContent> {
@@ -128,6 +112,10 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
   let key_points: string[] = [];
   let decisions: Decision[] = [];
   let action_items: ActionItem[] = [];
+  const assigneeEmailGroups = new Map<
+    string,
+    { userName: string; meetingTitle: string; items: Array<{ title: string; priority: string; deadline: string | null }> }
+  >();
   
   if (discussionText.trim()) {
     // Get AI summary and extraction
@@ -163,8 +151,8 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       // Strip markdown from task title
       const cleanTaskTitle = stripMarkdownFormatting(item.task);
       
-      // Parse deadline properly
-      const deadline = parseDeadline(item.deadline);
+      // Always derive deadline from meeting date
+      const deadline = deadlineFromMeetingDate(meeting.meeting_date);
       
       const result = await query(
         `INSERT INTO action_items (meeting_id, title, assignee_name, assignee_id, assigned_by, priority, deadline) 
@@ -176,6 +164,23 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
       action_items.push(actionItem);
 
       await triggerTaskCreatedAutomation(actionItem.id, 'mom_generation');
+
+      // Collect action items per assignee email for post-MoM mail dispatch
+      if (assigneeMatch.email) {
+        if (!assigneeEmailGroups.has(assigneeMatch.email)) {
+          assigneeEmailGroups.set(assigneeMatch.email, {
+            userName: assigneeMatch.name || 'Team Member',
+            meetingTitle: meeting.title,
+            items: [],
+          });
+        }
+
+        assigneeEmailGroups.get(assigneeMatch.email)!.items.push({
+          title: cleanTaskTitle,
+          priority: item.priority || 'medium',
+          deadline,
+        });
+      }
       
       // Send notification to assignee if they have a user account
       if (assigneeMatch.user_id) {
@@ -239,39 +244,6 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
         reference_type: 'meeting'
       });
     }
-  }
-
-  // Email action item summary to each assignee after MoM/PDF generation
-  const assigneeEmailGroups = new Map<
-    string,
-    { userName: string; meetingTitle: string; items: Array<{ title: string; priority: string; deadline: string | null }> }
-  >();
-
-  const assigneeRows = await query(
-    `SELECT ai.title, ai.priority, ai.deadline, u.email as assignee_email, u.name as assignee_user_name
-     FROM action_items ai
-     JOIN users u ON u.id = ai.assignee_id
-     WHERE ai.meeting_id = $1`,
-    [meetingId]
-  );
-
-  for (const row of assigneeRows.rows) {
-    const email = row.assignee_email as string;
-    if (!email) continue;
-
-    if (!assigneeEmailGroups.has(email)) {
-      assigneeEmailGroups.set(email, {
-        userName: (row.assignee_user_name as string) || 'Team Member',
-        meetingTitle: meeting.title,
-        items: [],
-      });
-    }
-
-    assigneeEmailGroups.get(email)!.items.push({
-      title: row.title as string,
-      priority: row.priority as string,
-      deadline: row.deadline as string | null,
-    });
   }
 
   for (const [email, payload] of assigneeEmailGroups.entries()) {
