@@ -247,7 +247,7 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
   }
 
   for (const [email, payload] of assigneeEmailGroups.entries()) {
-    await emailService.sendActionItemsSummary(email, payload.userName, payload.meetingTitle, payload.items);
+    await emailService.sendActionItemsSummary(email, payload.userName, payload.meetingTitle, payload.items, pdfPath);
   }
   
   return momContent;
