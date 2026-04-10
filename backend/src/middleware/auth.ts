@@ -6,6 +6,10 @@ export interface AuthRequest extends Request {
   userId?: string;
 }
 
+export const verifyToken = (token: string): { userId: string } => {
+  return jwt.verify(token, config.jwt.secret) as { userId: string };
+};
+
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
@@ -15,7 +19,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
     }
     
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, config.jwt.secret) as { userId: string };
+    const decoded = verifyToken(token);
     
     req.userId = decoded.userId;
     next();
@@ -31,7 +35,7 @@ export const optionalAuth = (req: AuthRequest, res: Response, next: NextFunction
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.split(' ')[1];
-      const decoded = jwt.verify(token, config.jwt.secret) as { userId: string };
+      const decoded = verifyToken(token);
       req.userId = decoded.userId;
     }
     

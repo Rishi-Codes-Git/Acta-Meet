@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   CheckSquare,
-  AlertCircle,
   Loader2,
   Plus,
   Calendar,
@@ -327,14 +326,27 @@ function CreateEditModal({ isOpen, item, onClose, onSave, loading }: CreateEditM
             </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1 block">Deadline</label>
-            <input
-              type="date"
-              value={formData.deadline ? formData.deadline.split('T')[0] : ''}
-              onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#42A090]"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Deadline</label>
+              <input
+                type="date"
+                value={formData.deadline ? formData.deadline.split('T')[0] : ''}
+                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#42A090]"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Assign To</label>
+              <input
+                type="text"
+                value={formData.assignee_name || ''}
+                onChange={(e) => setFormData({ ...formData, assignee_name: e.target.value })}
+                placeholder="Enter name or email"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#42A090]"
+              />
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
@@ -462,11 +474,25 @@ export default function ActionItemsPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this action item?')) return;
 
+    const prevAll = actionItems;
+    const prevMy = myActionItems;
+    const prevAssigned = assignedByMe;
+
+    // Optimistic UI update so item disappears immediately
+    setActionItems((items) => items.filter((item) => item.id !== id));
+    setMyActionItems((items) => items.filter((item) => item.id !== id));
+    setAssignedByMe((items) => items.filter((item) => item.id !== id));
+
     try {
       await actionItemsApi.delete(id);
-      await loadActionItems();
       toast.success('Action item deleted');
+      // Best-effort refresh to keep server/client perfectly in sync
+      await loadActionItems();
     } catch (error) {
+      // Rollback optimistic update if delete failed
+      setActionItems(prevAll);
+      setMyActionItems(prevMy);
+      setAssignedByMe(prevAssigned);
       console.error('Failed to delete action item:', error);
       toast.error('Failed to delete action item');
     }
@@ -502,20 +528,6 @@ export default function ActionItemsPage() {
     setEditingItem(undefined);
     setIsModalOpen(true);
   };
-
-  // Filter items
-  const filteredItems = actionItems.filter((item) => {
-    if (filters.search && !item.title.toLowerCase().includes(filters.search.toLowerCase())) {
-      return false;
-    }
-    if (filters.status && item.status !== filters.status) {
-      return false;
-    }
-    if (filters.priority && item.priority !== filters.priority) {
-      return false;
-    }
-    return true;
-  });
 
   const stats = {
     total: actionItems.length,
@@ -651,61 +663,6 @@ export default function ActionItemsPage() {
 
         {/* Right Sidebar */}
         <div className="space-y-6">
-          {/* All Action Items */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-[#42A090]/10 rounded-xl">
-                  <CheckSquare className="w-5 h-5 text-[#42A090]" />
-                </div>
-                <h2 className="text-lg font-display font-bold text-slate-900">All Items</h2>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="p-8 text-center">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-300 mx-auto" />
-              </div>
-            ) : filteredItems.length === 0 ? (
-              <div className="p-8 text-center">
-                <AlertCircle className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">No action items found</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-50 max-h-96 overflow-y-auto">
-                {filteredItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3 hover:bg-slate-50 cursor-pointer transition-colors border-l-4 border-slate-200 hover:border-[#42A090]"
-                    onClick={() => handleEditItem(item)}
-                  >
-                    <div className="flex items-start justify-between mb-1">
-                      <h4 className="font-medium text-slate-900 text-sm line-clamp-1">{item.title}</h4>
-                      <PriorityBadge priority={item.priority} />
-                    </div>
-                    <div className="flex items-center gap-1 mb-2">
-                      <StatusBadge status={item.status} />
-                    </div>
-                    {item.assignee_name && (
-                      <p className="text-xs text-slate-500">{item.assignee_name}</p>
-                    )}
-                    {item.deadline && (
-                      <p className="text-xs text-slate-400">
-                        Due: {new Date(item.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {filteredItems.length > 0 && (
-              <div className="p-4 border-t border-slate-100 text-center">
-                <p className="text-xs text-slate-500 mb-2">Showing {filteredItems.length} items</p>
-              </div>
-            )}
-          </div>
-
           {/* Completion Stats */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <h3 className="font-semibold text-slate-900 mb-4">Completion Stats</h3>

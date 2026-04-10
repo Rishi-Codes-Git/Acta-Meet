@@ -144,4 +144,34 @@ router.get('/:id/members', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Get team chat messages
+router.get('/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const memberCheck = await query(
+      'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const result = await query(
+      `SELECT m.id, m.team_id, m.sender_id, m.message, m.created_at, u.name as sender_name, u.avatar_url as sender_avatar_url
+       FROM team_chat_messages m
+       JOIN users u ON u.id = m.sender_id
+       WHERE m.team_id = $1
+       ORDER BY m.created_at ASC
+       LIMIT 200`,
+      [id]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get team messages error:', error);
+    res.status(500).json({ error: 'Failed to get messages' });
+  }
+});
+
 export default router;

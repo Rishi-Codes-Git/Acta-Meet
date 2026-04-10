@@ -6,6 +6,7 @@ interface AuthStore {
   token: string | null;
   isAuthenticated: boolean;
   setAuth: (user: User, token: string) => void;
+  updateUser: (user: User) => void;
   logout: () => void;
   loadFromStorage: () => void;
 }
@@ -19,6 +20,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
     localStorage.setItem('acta_token', token);
     localStorage.setItem('acta_user', JSON.stringify(user));
     set({ user, token, isAuthenticated: true });
+  },
+
+  updateUser: (user) => {
+    localStorage.setItem('acta_user', JSON.stringify(user));
+    set((state) => ({ ...state, user }));
   },
 
   logout: () => {

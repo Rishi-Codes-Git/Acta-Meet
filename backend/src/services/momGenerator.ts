@@ -3,6 +3,7 @@ import { summarizeDiscussion, extractMeetingInsights } from './openai';
 import { generatePDF, generateDocx } from './documentGenerator';
 import { createNotification } from './notificationService';
 import { triggerTaskCreatedAutomation } from './n8nAutomation';
+import { emailService } from './email';
 import { MomContent, Meeting, Participant, AgendaItem, DiscussionPoint, Decision, ActionItem } from '../types';
 
 // Strip markdown formatting for professional display
@@ -238,6 +239,43 @@ export async function generateMoM(meetingId: string, generatedBy?: string): Prom
         reference_type: 'meeting'
       });
     }
+  }
+
+  // Email action item summary to each assignee after MoM/PDF generation
+  const assigneeEmailGroups = new Map<
+    string,
+    { userName: string; meetingTitle: string; items: Array<{ title: string; priority: string; deadline: string | null }> }
+  >();
+
+  const assigneeRows = await query(
+    `SELECT ai.title, ai.priority, ai.deadline, u.email as assignee_email, u.name as assignee_user_name
+     FROM action_items ai
+     JOIN users u ON u.id = ai.assignee_id
+     WHERE ai.meeting_id = $1`,
+    [meetingId]
+  );
+
+  for (const row of assigneeRows.rows) {
+    const email = row.assignee_email as string;
+    if (!email) continue;
+
+    if (!assigneeEmailGroups.has(email)) {
+      assigneeEmailGroups.set(email, {
+        userName: (row.assignee_user_name as string) || 'Team Member',
+        meetingTitle: meeting.title,
+        items: [],
+      });
+    }
+
+    assigneeEmailGroups.get(email)!.items.push({
+      title: row.title as string,
+      priority: row.priority as string,
+      deadline: row.deadline as string | null,
+    });
+  }
+
+  for (const [email, payload] of assigneeEmailGroups.entries()) {
+    await emailService.sendActionItemsSummary(email, payload.userName, payload.meetingTitle, payload.items);
   }
   
   return momContent;

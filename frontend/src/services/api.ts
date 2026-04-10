@@ -42,6 +42,20 @@ export const authApi = {
   me: () => api.get('/auth/me'),
 };
 
+// Users API
+export const usersApi = {
+  getAll: (params?: { search?: string; team_id?: string }) => api.get('/users', { params }),
+  updateProfile: (id: string, data: { name?: string; two_factor_enabled?: boolean }) =>
+    api.put(`/users/${id}`, data),
+  uploadAvatar: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return api.post(`/users/${id}/avatar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+};
+
 // Meetings API
 export const meetingsApi = {
   create: (data: any) => api.post('/meetings', data),
@@ -109,6 +123,25 @@ export const transcribeApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+};
+
+// Teams API
+export const teamsApi = {
+  getAll: () => api.get('/teams'),
+  getById: (id: string) => api.get(`/teams/${id}`),
+  getMessages: (id: string) => api.get(`/teams/${id}/messages`),
+  create: (data: { name: string; description?: string }) => api.post('/teams', data),
+  addMember: (teamId: string, data: { user_id: string; role?: string }) =>
+    api.post(`/teams/${teamId}/members`, data),
+  removeMember: (teamId: string, userId: string) =>
+    api.delete(`/teams/${teamId}/members/${userId}`),
+};
+
+// 2FA API
+export const twoFaApi = {
+  enableOtp: () => api.post('/2fa/enable-2fa'),
+  verifyOtp: (otp: string) => api.post('/2fa/verify-2fa', { otp }),
+  disable: () => api.post('/2fa/disable-2fa'),
 };
 
 export default api;

@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS external_task_mappings CASCADE;
 DROP TABLE IF EXISTS integration_config CASCADE;
 DROP TABLE IF EXISTS trello_connections CASCADE;
 DROP TABLE IF EXISTS jira_connections CASCADE;
+DROP TABLE IF EXISTS team_chat_messages CASCADE;
 DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS transcriptions CASCADE;
 DROP TABLE IF EXISTS mom_documents CASCADE;
@@ -45,6 +46,9 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(50) DEFAULT 'associate',
     avatar_url VARCHAR(500),
+    two_factor_enabled BOOLEAN DEFAULT FALSE,
+    otp_code VARCHAR(6),
+    otp_expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -143,6 +147,7 @@ CREATE TABLE action_items (
     external_id VARCHAR(255),
     sync_status VARCHAR(50) DEFAULT 'not_synced',
     last_synced_at TIMESTAMP,
+    trello_card_id VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -249,6 +254,14 @@ CREATE TABLE integration_config (
     UNIQUE(team_id, external_source)
 );
 
+CREATE TABLE team_chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX idx_meetings_date ON meetings(meeting_date);
 CREATE INDEX idx_meetings_type ON meetings(type);
@@ -274,6 +287,7 @@ CREATE INDEX idx_external_mappings_source ON external_task_mappings(external_sou
 CREATE INDEX idx_webhook_events_source ON webhook_events(external_source);
 CREATE INDEX idx_webhook_events_processed ON webhook_events(processed);
 CREATE INDEX idx_integration_config_team ON integration_config(team_id);
+CREATE INDEX idx_team_chat_messages_team_created ON team_chat_messages(team_id, created_at DESC);
 `;
 
 async function setup() {

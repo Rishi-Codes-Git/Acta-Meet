@@ -15,11 +15,15 @@ const jwtOptions: SignOptions = {
 // Register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, name, password } = req.body;
+    const { email, name, password, role } = req.body;
     
     if (!email || !name || !password) {
       return res.status(400).json({ error: 'Email, name, and password are required' });
     }
+    
+    // Validate role if provided
+    const validRoles = ['intern', 'associate', 'team_lead', 'manager', 'executive', 'admin'];
+    const userRole = role && validRoles.includes(role) ? role : 'associate';
     
     // Check if user exists
     const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
@@ -32,8 +36,8 @@ router.post('/register', async (req: Request, res: Response) => {
     
     // Create user
     const result = await query(
-      'INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING id, email, name, created_at',
-      [email, name, password_hash]
+      'INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, created_at',
+      [email, name, password_hash, userRole]
     );
     
     const user = result.rows[0];
@@ -79,6 +83,7 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role,
         created_at: user.created_at,
       },
       token,
@@ -93,7 +98,7 @@ router.post('/login', async (req: Request, res: Response) => {
 router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      'SELECT id, email, name, created_at FROM users WHERE id = $1',
+      'SELECT id, email, name, role, avatar_url, two_factor_enabled, created_at FROM users WHERE id = $1',
       [req.userId]
     );
     

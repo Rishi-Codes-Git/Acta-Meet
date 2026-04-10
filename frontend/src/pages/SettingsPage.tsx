@@ -1,24 +1,35 @@
 import React, { useState } from 'react';
 import { MainLayout } from '@/components/layout';
 import { useAuthStore } from '@/store/authStore';
-import { Upload, Moon, Sun, Lock, Shield, Eye, EyeOff, UserCircle2, Palette } from 'lucide-react';
+import { Upload, Lock, Shield, Eye, EyeOff, UserCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { usersApi, twoFaApi } from '@/services/api';
 
-type SettingsTab = 'profile' | 'display' | 'security';
+type SettingsTab = 'profile' | 'security';
 
 const tabs: Array<{ key: SettingsTab; label: string; icon: React.ElementType }> = [
   { key: 'profile', label: 'Profile', icon: UserCircle2 },
-  { key: 'display', label: 'Display', icon: Palette },
   { key: 'security', label: 'Security', icon: Shield },
 ];
 
+const toAbsoluteAssetUrl = (assetPath: string) => {
+  if (!assetPath) return '';
+  if (assetPath.startsWith('http://') || assetPath.startsWith('https://')) {
+    return assetPath;
+  }
+  return assetPath.startsWith('/') ? assetPath : `/${assetPath}`;
+};
+
 export default function SettingsPage() {
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.two_factor_enabled || false);
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
+  const [tfaVerifyCode, setTfaVerifyCode] = useState('');
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isSavingTfa, setIsSavingTfa] = useState(false);
 
   const [profileData, setProfileData] = useState({
     name: user?.name || '',
@@ -62,12 +73,37 @@ export default function SettingsPage() {
     });
   };
 
-  const handleProfileSave = () => {
-    if (!profileData.name || !profileData.email) {
-      toast.error('Please fill in all fields');
+  const handleProfileSave = async () => {
+    if (!profileData.name.trim()) {
+      toast.error('Name is required');
       return;
     }
-    toast.success('Profile updated successfully');
+    if (!user?.id) {
+      toast.error('Unable to identify current user');
+      return;
+    }
+
+    const trimmedName = profileData.name.trim();
+    if (trimmedName === user.name) {
+      toast.success('No changes to save');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const response = await usersApi.updateProfile(user.id, { name: trimmedName });
+      const updatedUser = {
+        ...user,
+        name: response.data?.name || trimmedName,
+      };
+      updateUser(updatedUser);
+      setProfileData((prev) => ({ ...prev, name: updatedUser.name, email: user.email }));
+      toast.success('Name updated successfully');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to update name');
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   const handlePasswordSave = () => {
@@ -88,30 +124,90 @@ export default function SettingsPage() {
     setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
         toast.error('Avatar must be less than 5MB');
         return;
       }
-      toast.success('Avatar uploaded successfully');
+      if (!user?.id) {
+        toast.error('Unable to identify current user');
+        return;
+      }
+
+      setIsUploadingAvatar(true);
+      try {
+        const response = await usersApi.uploadAvatar(user.id, file);
+        const updatedUser = {
+          ...user,
+          avatar_url: response.data?.avatar_url,
+        };
+        updateUser(updatedUser);
+        toast.success('Avatar uploaded successfully');
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || 'Failed to upload avatar');
+      } finally {
+        setIsUploadingAvatar(false);
+        e.target.value = '';
+      }
     }
   };
 
-  const handleEnableTwoFactor = () => {
-    setShowTwoFactorSetup(true);
+  const handleEnableTwoFactor = async () => {
+    if (!user?.id) {
+      toast.error('Unable to identify current user');
+      return;
+    }
+    
+    setIsSavingTfa(true);
+    try {
+      await twoFaApi.enableOtp();
+      toast.success('Check your email for the verification code');
+      setShowTwoFactorSetup(true);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to send OTP');
+    } finally {
+      setIsSavingTfa(false);
+    }
   };
 
-  const handleConfirmTwoFactor = () => {
-    toast.success('Two-factor authentication enabled');
-    setTwoFactorEnabled(true);
-    setShowTwoFactorSetup(false);
+  const handleConfirmTwoFactor = async () => {
+    if (!tfaVerifyCode.trim()) {
+      toast.error('Please enter the verification code from your email');
+      return;
+    }
+
+    setIsSavingTfa(true);
+    try {
+      await twoFaApi.verifyOtp(tfaVerifyCode);
+      setTwoFactorEnabled(true);
+      setShowTwoFactorSetup(false);
+      setTfaVerifyCode('');
+      toast.success('Two-factor authentication enabled!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Invalid or expired code');
+    } finally {
+      setIsSavingTfa(false);
+    }
   };
 
-  const handleDisableTwoFactor = () => {
-    toast.success('Two-factor authentication disabled');
-    setTwoFactorEnabled(false);
+  const handleDisableTwoFactor = async () => {
+    if (!user?.id) {
+      toast.error('Unable to identify current user');
+      return;
+    }
+
+    setIsSavingTfa(true);
+    try {
+      await twoFaApi.disable();
+      setTwoFactorEnabled(false);
+      toast.success('Two-factor authentication disabled');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to disable TFA');
+    } finally {
+      setIsSavingTfa(false);
+    }
   };
 
   return (
@@ -146,13 +242,33 @@ export default function SettingsPage() {
             <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
               <h2 className="text-lg font-display font-bold text-slate-900 mb-5">Profile Photo</h2>
               <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-                <div className="w-20 h-20 rounded-2xl bg-[#42A090]/10 text-[#42A090] flex items-center justify-center font-bold text-2xl">
-                  {initials}
-                </div>
-                <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#42A090] hover:bg-[#358070] text-white font-semibold cursor-pointer transition-colors">
+                {user?.avatar_url ? (
+                  <img
+                    src={toAbsoluteAssetUrl(user.avatar_url)}
+                    alt="Profile avatar"
+                    className="w-20 h-20 rounded-2xl object-cover border border-slate-200"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-[#42A090]/10 text-[#42A090] flex items-center justify-center font-bold text-2xl">
+                    {initials}
+                  </div>
+                )}
+                <label
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold transition-colors ${
+                    isUploadingAvatar
+                      ? 'bg-[#7cb9ae] cursor-not-allowed'
+                      : 'bg-[#42A090] hover:bg-[#358070] cursor-pointer'
+                  }`}
+                >
                   <Upload className="w-4 h-4" />
-                  Upload Photo
-                  <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                  {isUploadingAvatar ? 'Uploading...' : 'Upload Photo'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(e) => void handleAvatarUpload(e)}
+                    className="hidden"
+                    disabled={isUploadingAvatar}
+                  />
                 </label>
               </div>
             </div>
@@ -176,17 +292,19 @@ export default function SettingsPage() {
                   type="email"
                   name="email"
                   value={profileData.email}
-                  onChange={handleProfileChange}
-                  className={inputClassName}
+                  className={`${inputClassName} bg-slate-100 text-slate-500 cursor-not-allowed`}
                   placeholder="your@email.com"
+                  disabled
                 />
+                <p className="text-xs text-slate-500 mt-2">Email changes are not enabled yet.</p>
               </div>
               <button
                 type="button"
-                onClick={handleProfileSave}
-                className="inline-flex items-center justify-center bg-[#42A090] hover:bg-[#358070] text-white font-semibold px-5 py-2.5 rounded-xl transition-colors"
+                onClick={() => void handleProfileSave()}
+                disabled={isSavingProfile}
+                className="inline-flex items-center justify-center bg-[#42A090] hover:bg-[#358070] text-white font-semibold px-5 py-2.5 rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save Changes
+                {isSavingProfile ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
 
@@ -286,37 +404,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {activeTab === 'display' && (
-          <div className="space-y-6">
-            <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-display font-bold text-slate-900 flex items-center gap-2">
-                    {isDarkMode ? <Moon className="w-5 h-5 text-[#42A090]" /> : <Sun className="w-5 h-5 text-[#42A090]" />}
-                    Dark Mode
-                  </h2>
-                  <p className="text-slate-600 text-sm mt-1">
-                    {isDarkMode ? 'Dark mode is currently enabled' : 'Light mode is currently enabled'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                    isDarkMode ? 'bg-[#42A090]' : 'bg-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                      isDarkMode ? 'translate-x-7' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {activeTab === 'security' && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
@@ -336,9 +423,10 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={handleDisableTwoFactor}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors"
+                    disabled={isSavingTfa}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
                   >
-                    Disable
+                    {isSavingTfa ? 'Disabling...' : 'Disable'}
                   </button>
                 ) : (
                   <button
@@ -353,29 +441,32 @@ export default function SettingsPage() {
 
               {showTwoFactorSetup && !twoFactorEnabled && (
                 <div className="mt-6 space-y-4 pt-6 border-t border-slate-100">
-                  <p className="text-slate-600 text-sm">
-                    Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.).
-                  </p>
-                  <div className="flex justify-center p-5 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="w-40 h-40 bg-white border border-slate-200 rounded-lg flex items-center justify-center">
-                      <span className="text-slate-500 text-sm">QR Code Placeholder</span>
-                    </div>
+                  <div className="p-4 bg-teal-50 rounded-xl border border-teal-200">
+                    <p className="text-sm font-medium text-teal-900 mb-2">📧 Check your email</p>
+                    <p className="text-sm text-teal-700">We sent a 6-digit verification code to your email. Please enter it below.</p>
+                    <p className="text-xs text-teal-600 mt-2">Code expires in 10 minutes.</p>
                   </div>
+                  
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Enter verification code from your app
+                      Enter the code from your email
                     </label>
                     <input
                       type="text"
                       maxLength={6}
                       placeholder="000000"
+                      value={tfaVerifyCode}
+                      onChange={(e) => setTfaVerifyCode(e.target.value.replace(/[^0-9]/g, ''))}
                       className={`${inputClassName} text-center text-xl tracking-widest`}
                     />
                   </div>
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => setShowTwoFactorSetup(false)}
+                      onClick={() => {
+                        setShowTwoFactorSetup(false);
+                        setTfaVerifyCode('');
+                      }}
                       className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors"
                     >
                       Cancel
@@ -383,9 +474,10 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={handleConfirmTwoFactor}
-                      className="flex-1 px-4 py-2.5 bg-[#42A090] hover:bg-[#358070] text-white font-semibold rounded-xl transition-colors"
+                      disabled={isSavingTfa || tfaVerifyCode.length !== 6}
+                      className="flex-1 px-4 py-2.5 bg-[#42A090] hover:bg-[#358070] text-white font-semibold rounded-xl transition-colors disabled:opacity-60"
                     >
-                      Verify & Enable
+                      {isSavingTfa ? 'Verifying...' : 'Verify & Enable'}
                     </button>
                   </div>
                 </div>

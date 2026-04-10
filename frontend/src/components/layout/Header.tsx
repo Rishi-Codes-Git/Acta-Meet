@@ -23,7 +23,6 @@ export default function Header({ title, subtitle }: HeaderProps) {
   const { user } = useAuthStore();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     void loadNotifications();
@@ -38,15 +37,12 @@ export default function Header({ title, subtitle }: HeaderProps) {
 
   const loadNotifications = async () => {
     if (!user) return;
-    setLoading(true);
     try {
       const res = await notificationsApi.getMy();
       const notifs = res.data || [];
       setNotifications(Array.isArray(notifs) ? notifs : []);
     } catch (error) {
       console.error('Failed to load notifications:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -84,7 +80,7 @@ export default function Header({ title, subtitle }: HeaderProps) {
             <input
               type="text"
               placeholder="Search meetings..."
-              className="w-64 pl-10 pr-4 py-2 bg-slate-100 border-0 rounded-xl text-sm focus:ring-2 focus:ring-[#42A090]/20 focus:bg-white transition-all"
+              className="w-64 pl-10 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-sm text-slate-900 focus:ring-2 focus:ring-[#42A090]/20 focus:bg-white transition-all"
             />
           </div>
 
@@ -122,23 +118,23 @@ export default function Header({ title, subtitle }: HeaderProps) {
                       notifications.map((notif) => (
                         <div
                           key={notif.id}
-                          className={`p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors ${
-                            !notif.read ? 'bg-teal-50/50' : ''
-                          }`}
-                        >
+                           className={`p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors ${
+                             !notif.read ? 'bg-teal-50/50' : ''
+                            }`}
+                          >
                           <div className="flex items-start gap-3">
                             {!notif.read && (
                               <div className="w-2 h-2 rounded-full bg-[#42A090] mt-2 flex-shrink-0" />
                             )}
                             <div className={!notif.read ? '' : 'pl-5'}>
-                              <p className="text-sm font-medium text-slate-900">{notif.title}</p>
-                              {notif.message && (
-                                <p className="text-sm text-slate-500 line-clamp-2">{notif.message}</p>
-                              )}
-                              <p className="text-xs text-slate-400 mt-1">{formatTime(notif.created_at)}</p>
+                               <p className="text-sm font-medium text-slate-900">{notif.title}</p>
+                               {notif.message && (
+                                 <p className="text-sm text-slate-500 line-clamp-2">{notif.message}</p>
+                                )}
+                               <p className="text-xs text-slate-400 mt-1">{formatTime(notif.created_at)}</p>
+                              </div>
                             </div>
                           </div>
-                        </div>
                       ))
                     )}
                   </div>

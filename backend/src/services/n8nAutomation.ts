@@ -27,7 +27,7 @@ async function loadTaskPayload(actionItemId: string): Promise<AutomationTaskPayl
             m.title AS meeting_title,
             u.email AS assignee_email
      FROM action_items ai
-     JOIN meetings m ON m.id = ai.meeting_id
+     LEFT JOIN meetings m ON m.id = ai.meeting_id
      LEFT JOIN users u ON u.id = ai.assignee_id
      WHERE ai.id = $1`,
     [actionItemId]

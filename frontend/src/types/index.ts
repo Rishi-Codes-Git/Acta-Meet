@@ -4,6 +4,7 @@ export interface User {
   name: string;
   role?: string;
   avatar_url?: string;
+  two_factor_enabled?: boolean;
   created_at: string;
 }
 

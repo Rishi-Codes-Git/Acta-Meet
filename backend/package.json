@@ -7,9 +7,12 @@
     "dev": "nodemon src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:setup": "ts-node src/db/setup.ts"
+    "db:setup": "ts-node src/db/setup.ts",
+    "db:migrate": "ts-node src/db/migrate.ts",
+    "db:seed": "ts-node src/db/seed.ts"
   },
   "dependencies": {
+    "@types/socket.io": "^3.0.1",
     "@xenova/transformers": "^2.17.2",
     "axios": "^1.15.0",
     "bcrypt": "^5.1.1",
@@ -22,9 +25,11 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.5",
     "openai": "^4.28.0",
     "pdfkit": "^0.13.0",
     "pg": "^8.11.3",
+    "socket.io": "^4.8.3",
     "uuid": "^9.0.0",
     "wavefile": "^11.0.0",
     "zod": "^3.22.4"
@@ -37,6 +42,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.6",
+    "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.10.9",
     "@types/uuid": "^9.0.7",
     "nodemon": "^3.0.2",

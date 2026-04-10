@@ -4,6 +4,7 @@ import { AuthRequest, optionalAuth, authMiddleware } from '../middleware/auth';
 import { canCreateActionItems } from '../middleware/permissions';
 import { notifyTaskAssigned, notifyTaskUpdated } from '../services/notificationService';
 import { triggerTaskCreatedAutomation, triggerTaskUpdatedAutomation } from '../services/n8nAutomation';
+import { trelloService } from '../services/trello';
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
              u.email as assignee_email,
              ab.name as assigned_by_name
       FROM action_items ai 
-      JOIN meetings m ON ai.meeting_id = m.id
+      LEFT JOIN meetings m ON ai.meeting_id = m.id
       LEFT JOIN users u ON ai.assignee_id = u.id
       LEFT JOIN users ab ON ai.assigned_by = ab.id
       WHERE 1=1
@@ -84,7 +85,7 @@ router.get('/my', authMiddleware, async (req: AuthRequest, res: Response) => {
              m.title as meeting_title,
              ab.name as assigned_by_name
       FROM action_items ai 
-      JOIN meetings m ON ai.meeting_id = m.id
+      LEFT JOIN meetings m ON ai.meeting_id = m.id
       LEFT JOIN users ab ON ai.assigned_by = ab.id
       WHERE ai.assignee_id = $1
     `;
@@ -152,7 +153,7 @@ router.get('/assigned-by-me', authMiddleware, async (req: AuthRequest, res: Resp
              u.name as assignee_user_name,
              u.email as assignee_email
       FROM action_items ai 
-      JOIN meetings m ON ai.meeting_id = m.id
+      LEFT JOIN meetings m ON ai.meeting_id = m.id
       LEFT JOIN users u ON ai.assignee_id = u.id
       WHERE ai.assigned_by = $1
       ORDER BY ai.created_at DESC
@@ -247,6 +248,15 @@ router.put('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       await triggerTaskUpdatedAutomation(updated.id, changedFields, 'manual_update');
     }
     
+    // Sync to Trello if card exists
+    if (oldItem.trello_card_id && (title || description)) {
+      await trelloService.updateCard(
+        oldItem.trello_card_id,
+        title || oldItem.title,
+        description || oldItem.description
+      );
+    }
+    
     res.json(updated);
   } catch (error) {
     console.error('Update action item error:', error);
@@ -294,20 +304,26 @@ router.patch('/:id/status', optionalAuth, async (req: AuthRequest, res: Response
 });
 
 // Delete action item
-router.delete('/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     
+    console.log(`🗑️ Delete request for action item: ${id}`);
+    
+    // Simple delete without permission check first
     const result = await query('DELETE FROM action_items WHERE id = $1 RETURNING id', [id]);
     
     if (result.rows.length === 0) {
+      console.log(`❌ Action item not found: ${id}`);
       return res.status(404).json({ error: 'Action item not found' });
     }
     
-    res.json({ message: 'Action item deleted' });
+    console.log(`✅ Action item deleted: ${id}`);
+    res.json({ message: 'Action item deleted', id: result.rows[0].id });
   } catch (error) {
-    console.error('Delete action item error:', error);
-    res.status(500).json({ error: 'Failed to delete action item' });
+    console.error('❌ Delete action item error:', error);
+    console.error('Stack:', (error as any)?.stack);
+    res.status(500).json({ error: 'Failed to delete action item', details: String(error) });
   }
 });
 
@@ -316,25 +332,69 @@ router.post('/', authMiddleware, canCreateActionItems, async (req: AuthRequest, 
   try {
     const { meeting_id, title, description, assignee_name, assignee_id, priority, deadline } = req.body;
     
+    console.log('🔍 Creating action item with:', { meeting_id, title, description, assignee_name, assignee_id, priority, deadline });
+    
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
+    }
+    
+    // If assignee_name is provided but not assignee_id, look up the user
+    let resolvedAssigneeId = assignee_id;
+    let resolvedAssigneeName = assignee_name;
+    
+    if (assignee_name && !assignee_id) {
+      const userResult = await query(
+        `SELECT id, name, email FROM users 
+         WHERE LOWER(name) LIKE LOWER($1) OR LOWER(email) LIKE LOWER($1)
+         LIMIT 1`,
+        [`%${assignee_name}%`]
+      );
+      
+      if (userResult.rows.length > 0) {
+        resolvedAssigneeId = userResult.rows[0].id;
+        resolvedAssigneeName = userResult.rows[0].name;
+        console.log(`✅ Resolved assignee: ${resolvedAssigneeName} (${resolvedAssigneeId})`);
+      } else {
+        console.log(`⚠️ Could not find user matching: ${assignee_name}`);
+      }
+    }
+    
     const result = await query(
-      `INSERT INTO action_items (meeting_id, title, description, assignee_name, assignee_id, assigned_by, priority, deadline)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [meeting_id, title, description, assignee_name, assignee_id, req.userId, priority || 'medium', deadline]
+      `INSERT INTO action_items (meeting_id, title, description, assignee_name, assignee_id, assigned_by, priority, deadline, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [meeting_id || null, title, description || null, resolvedAssigneeName || null, resolvedAssigneeId || null, req.userId, priority || 'medium', deadline || null, 'pending']
     );
+    
+    console.log('✅ Action item created:', result.rows[0].id);
     
     const actionItem = result.rows[0];
     
     // Notify assignee
-    if (assignee_id) {
-      await notifyTaskAssigned(assignee_id, title, actionItem.id);
+    if (resolvedAssigneeId) {
+      console.log('📧 Notifying assignee:', resolvedAssigneeId);
+      await notifyTaskAssigned(resolvedAssigneeId, title, actionItem.id);
     }
 
+    console.log('🤖 Triggering automation');
     await triggerTaskCreatedAutomation(actionItem.id, 'manual_create');
+    
+    // Create Trello card automatically
+    console.log('🔗 Creating Trello card');
+    const trelloCard = await trelloService.createCardForActionItem(title, description);
+    if (trelloCard) {
+      // Store Trello card ID for future updates
+      await query(
+        'UPDATE action_items SET trello_card_id = $1 WHERE id = $2',
+        [trelloCard.id, actionItem.id]
+      );
+      console.log(`✅ Trello card linked to action item: ${actionItem.id}`);
+    }
     
     res.status(201).json(actionItem);
   } catch (error) {
-    console.error('Create action item error:', error);
-    res.status(500).json({ error: 'Failed to create action item' });
+    console.error('❌ Create action item error:', error);
+    console.error('Stack:', (error as any)?.stack);
+    res.status(500).json({ error: 'Failed to create action item', details: String(error) });
   }
 });
 
