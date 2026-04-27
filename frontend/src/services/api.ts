@@ -48,7 +48,7 @@ export const authApi = {
 // Users API
 export const usersApi = {
   getAll: (params?: { search?: string; team_id?: string }) => api.get('/users', { params }),
-  updateProfile: (id: string, data: { name?: string; two_factor_enabled?: boolean }) =>
+  updateProfile: (id: string, data: { name?: string; email?: string; two_factor_enabled?: boolean }) =>
     api.put(`/users/${id}`, data),
   uploadAvatar: (id: string, file: File) => {
     const formData = new FormData();

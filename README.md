@@ -96,7 +96,7 @@ npm run db:setup
 # Start backend
 npm run dev
 ```
-Backend runs on `http://localhost:3000`
+Backend runs on `http://localhost:3001`
 
 ### 3. Frontend Setup
 ```bash
@@ -105,6 +105,25 @@ npm install
 npm run dev
 ```
 Frontend runs on `http://localhost:5173`
+
+### 3.1 Access from other laptops on same Wi-Fi/LAN
+Use your host machine IP (`10.213.5.24`) so other devices can reach the app.
+
+Backend `.env`:
+```bash
+HOST=0.0.0.0
+PORT=3001
+```
+
+Frontend `.env`:
+```bash
+VITE_API_TARGET=http://10.213.5.24:3001
+VITE_SOCKET_URL=http://10.213.5.24:3001
+```
+
+Open from other laptops:
+- `http://10.213.5.24:5173` (frontend)
+- backend API via `http://10.213.5.24:3001`
 
 ### 4. Desktop App (Optional)
 ```bash

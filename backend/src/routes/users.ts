@@ -98,17 +98,18 @@ router.put('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
     
-    const { name, avatar_url, two_factor_enabled } = req.body;
+    const { name, email, avatar_url, two_factor_enabled } = req.body;
     
     const result = await query(
       `UPDATE users SET 
         name = COALESCE($1, name),
-        avatar_url = COALESCE($2, avatar_url),
-        two_factor_enabled = COALESCE($3, two_factor_enabled),
+        email = COALESCE($2, email),
+        avatar_url = COALESCE($3, avatar_url),
+        two_factor_enabled = COALESCE($4, two_factor_enabled),
         updated_at = NOW()
-       WHERE id = $4 
+       WHERE id = $5 
        RETURNING id, email, name, role, avatar_url, two_factor_enabled, created_at`,
-      [name, avatar_url, two_factor_enabled, id]
+      [name, email, avatar_url, two_factor_enabled, id]
     );
     
     res.json(result.rows[0]);

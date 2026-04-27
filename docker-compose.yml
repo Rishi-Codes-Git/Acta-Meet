@@ -3,21 +3,21 @@ version: '3.8'
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: acta-postgres
+    container_name: mom-postgres-acta
     restart: unless-stopped
     environment:
-      POSTGRES_USER: acta_user
-      POSTGRES_PASSWORD: acta_password_2026
-      POSTGRES_DB: acta_db
+      POSTGRES_USER: mom_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mom_db
     ports:
       - "5432:5432"
     volumes:
-      - acta_postgres_data:/var/lib/postgresql/data
+      - mom_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U acta_user -d acta_db"]
+      test: ["CMD-SHELL", "pg_isready -U mom_user -d mom_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
-  acta_postgres_data:
+  mom_postgres_data:

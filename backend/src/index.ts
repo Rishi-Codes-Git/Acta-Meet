@@ -168,13 +168,14 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 const startServer = async () => {
   try {
     await ensureRealtimeSchema();
-    server.listen(config.port, () => {
+    // Bind to 0.0.0.0 to accept all interfaces, but display the configured IP
+    server.listen(config.port, '0.0.0.0', () => {
       console.log(`
   ╔═══════════════════════════════════════════════════╗
   ║                                                   ║
   ║     🎯 ${config.appName} API Server                       ║
   ║                                                   ║
-  ║     Running on: http://localhost:${config.port}          ║
+  ║     Running on: http://${config.host}:${config.port}             ║
   ║     Environment: ${config.nodeEnv}                  ║
   ║                                                   ║
   ╚═══════════════════════════════════════════════════╝

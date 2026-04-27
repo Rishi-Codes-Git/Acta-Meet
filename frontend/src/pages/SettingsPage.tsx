@@ -82,29 +82,36 @@ export default function SettingsPage() {
       toast.error('Name is required');
       return;
     }
+    if (!profileData.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
     if (!user?.id) {
       toast.error('Unable to identify current user');
       return;
     }
 
     const trimmedName = profileData.name.trim();
-    if (trimmedName === user.name) {
+    const trimmedEmail = profileData.email.trim();
+    
+    if (trimmedName === user.name && trimmedEmail === user.email) {
       toast.success('No changes to save');
       return;
     }
 
     setIsSavingProfile(true);
     try {
-      const response = await usersApi.updateProfile(user.id, { name: trimmedName });
+      const response = await usersApi.updateProfile(user.id, { name: trimmedName, email: trimmedEmail });
       const updatedUser = {
         ...user,
         name: response.data?.name || trimmedName,
+        email: response.data?.email || trimmedEmail,
       };
       updateUser(updatedUser);
-      setProfileData((prev) => ({ ...prev, name: updatedUser.name, email: user.email }));
-      toast.success('Name updated successfully');
+      setProfileData((prev) => ({ ...prev, name: updatedUser.name, email: updatedUser.email }));
+      toast.success('Profile updated successfully');
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to update name');
+      toast.error(error.response?.data?.error || 'Failed to update profile');
     } finally {
       setIsSavingProfile(false);
     }
@@ -302,11 +309,10 @@ export default function SettingsPage() {
                   type="email"
                   name="email"
                   value={profileData.email}
-                  className={`${inputClassName} bg-slate-100 text-slate-500 cursor-not-allowed`}
+                  onChange={handleProfileChange}
+                  className={inputClassName}
                   placeholder="your@email.com"
-                  disabled
                 />
-                <p className="text-xs text-slate-500 mt-2">Email changes are not enabled yet.</p>
               </div>
               <button
                 type="button"
